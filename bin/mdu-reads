@@ -1,0 +1,103 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU qw(msg err);
+
+#-------------------------------------------------------------------
+# templates for outputs
+
+my %template = (
+  'R1'		=> "%1",
+  'R2'		=> "%2",
+  'R12'		=> "%1 %2",
+  'nullarbor'   => "%i\t%1\t%2\n",
+  'snippy'      => "--R1 %1 --R2 %2",
+  'bwamem'      => "%1 %2",
+  'megahit'	=> "--input-cmd 'gzip -c -d -f %1 %2'",
+  'velvet'      => "-shortPaired -fmtAuto -separate %1 %2",
+  'spades'      => "-1 %1 -2 %1",
+  'bowtie'      => "-1 %1 -2 %1",
+  'pear'        => "-f %1 -r %2",
+  'kraken'      => "--paired %1 %2",
+);
+
+sub list_formats {
+  for my $fmt (sort keys %template) { 
+    my $desc = $template{$fmt};
+    $desc =~ s/\t/ <tab> /g;
+    $desc =~ s/\n/ <newline> /g;
+    my $fmt = sprintf "%-10s", $fmt;
+    msg("$fmt\t$desc");
+  }
+  exit;
+}
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $quiet   = 0;
+my $format  = 'R12';
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  my @fmt = sort keys %template;
+  print <<"USAGE";
+Synopsis:
+  Retrieve path to read files of MDU sequences isolates
+Usage: 
+  $EXE [options] [--format velvet] <ID1> [<ID2> ...]
+Options:
+  --help	This help
+  --verbose	Extra debugging output
+  --quiet	No screen output
+  --list        Describe the supported formats
+  --format	Output style: @fmt (DEFAULT=$format)
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"     => \&usage,
+  "verbose"  => \$verbose,
+  "quiet"    => \$quiet,
+  "format=s" => \$format,
+  "list"     => \&list_formats,
+) 
+or usage();
+
+MDU->quiet($quiet);
+
+exists $template{$format} or err("Invalid --format '$format'");
+
+#-------------------------------------------------------------------
+# main script
+
+@ARGV or err("No isolate IDs provided.");
+my $fmt = $template{$format};
+if ($fmt !~ m/\n$/ and @ARGV > 1) {
+  err("--format $format is only suitable for one ID at a time");
+}
+
+my %seen;
+
+for my $name (@ARGV) {
+  my $id = MDU->id($name) or err("Invalid ID: $name");
+  my @reads = MDU->reads($id) or err("No/multiple paired reads: $name");
+  $seen{$id}++ and err("Duplicate ID: $id (from $name)");
+  my $line = $fmt;
+  $line =~ s/%i/$id/;
+  $line =~ s/%1/\Q$reads[0]\E/;
+  $line =~ s/%2/\Q$reads[1]\E/;
+  print "$line";
+}
+
+#-------------------------------------------------------------------
