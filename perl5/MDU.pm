@@ -11,7 +11,18 @@ our $quiet = 0;
 #----------------------------------------------------------------------
 
 sub dir {
-  return $MDUDIR;
+  my($self, $id) = @_;
+  return $id ? "$MDUDIR/$id" : $MDUDIR;
+}
+
+#----------------------------------------------------------------------
+
+sub all_ids {
+  my $root = MDU->dir;
+  opendir(my $dh, MDU->dir) or err("Could not read MDU dir: $root");
+  my @id = grep { !m/^\./ and -d "$root/$_" } readdir($dh);
+  closedir($dh);
+  return @id;
 }
 
 #----------------------------------------------------------------------
@@ -28,6 +39,7 @@ sub reads {
   my($self, $name) = @_;
   my $id = MDU->id($name);
   my @file = glob( MDU->dir . "/$id/*.f*q.gz" );
+  @file = sort @file; # ensure R1 before R2
   return @file if @file==2;
   return;
 }
