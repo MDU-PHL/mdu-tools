@@ -95,8 +95,10 @@ for my $name (@ARGV) {
   $seen{$id}++ and err("Duplicate ID: $id (from $name)");
   my $line = $fmt;
   $line =~ s/%i/$id/;
-  $line =~ s/%1/\Q$reads[0]\E/;
-  $line =~ s/%2/\Q$reads[1]\E/;
+#  $line =~ s/%1/\Q$reads[0]\E/;
+#  $line =~ s/%2/\Q$reads[1]\E/;
+  $line =~ s/%1/$reads[0]/;
+  $line =~ s/%2/$reads[1]/;
   print "$line";
 }
 
