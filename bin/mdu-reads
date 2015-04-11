@@ -45,7 +45,7 @@ sub list_formats {
 
 my $verbose = 0;
 my $quiet   = 0;
-my $format  = 'R12';
+my $format  = 'nullabor';
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -54,7 +54,7 @@ sub usage {
 Synopsis:
   Retrieve path to read files of MDU sequences isolates
 Usage: 
-  $EXE [options] [--format velvet] <ID1> [<ID2> ...]
+  $EXE [options] [--format XXX] <ID1> [<ID2> ...]
 Options:
   --help	This help
   --verbose	Extra debugging output
