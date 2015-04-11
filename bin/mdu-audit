@@ -1,0 +1,67 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU qw(msg err);
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $quiet   = 0;
+my $minsize = 30; # Megabytes
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"USAGE";
+Synopsis:
+  List all MDU files and report bad isolates
+Usage: 
+  $EXE [options] [--format XXX] [ID1 ID2 ...]
+Options:
+  --help	This help
+  --verbose	Extra debugging output
+  --quiet	No screen output
+  --minsize XX	Minimum file size in MB to accept ($minsize)
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"     => \&usage,
+  "verbose"  => \$verbose,
+  "quiet"    => \$quiet,
+  "minsize=i" => \$minsize,
+) 
+or usage();
+
+MDU->quiet($quiet);
+
+#-------------------------------------------------------------------
+# main script
+
+#my $home = MDU->dir;
+my @ID = @ARGV ? @ARGV : MDU->all_ids();
+my $count=0;
+
+for my $name (sort @ID) {
+  my $id = MDU->id($name) or err("Invalid ID: $name");
+  my @reads = MDU->reads($id);
+  err("$id - need to fix read files:", MDU->dir($id)) unless @reads==2;
+  my @sizes = map { int( (-s $_)/1E6 ) } @reads;
+  for my $i (0 .. $#reads) {
+    err("$id - read file $reads[$i] too small: $sizes[$i] < $minsize MB") if $sizes[$i] < $minsize;
+  }
+  print join("\t", $id, @sizes, @reads),"\n";
+  $count++;
+}
+print "Found $count isolates.\n";
+
+#-------------------------------------------------------------------
