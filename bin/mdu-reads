@@ -45,7 +45,7 @@ sub list_formats {
 
 my $verbose = 0;
 my $quiet   = 0;
-my $format  = 'nullabor';
+my $format  = 'nullarbor';
 
 sub usage {
   my $EXE = $FindBin::RealScript;
