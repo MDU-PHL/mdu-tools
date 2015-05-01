@@ -27,6 +27,8 @@ my %template = (
   'bowtie'      => "-1 %1 -2 %1",
   'pear'        => "-f %1 -r %2",
   'kraken'      => "--paired %1 %2",
+  'symlink'     => "ln -s %1 %i_R1.fq.gz ; ln -s %2 %i_R2.fq.gz\n",
+  'dirlink'     => "mkdir %i && ln -s %1 %i/%i_R1.fq.gz && ln -s %2 %i/%i_R2.fq.gz\n",
 );
 
 sub list_formats {
@@ -97,8 +99,9 @@ for my $name (@ARGV) {
   $line =~ s/%i/$id/;
 #  $line =~ s/%1/\Q$reads[0]\E/;
 #  $line =~ s/%2/\Q$reads[1]\E/;
-  $line =~ s/%1/$reads[0]/;
-  $line =~ s/%2/$reads[1]/;
+  $line =~ s/%1/$reads[0]/g;
+  $line =~ s/%2/$reads[1]/g;
+  $line =~ s/%i/$id/g;
   print "$line";
 }
 
