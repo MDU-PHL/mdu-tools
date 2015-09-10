@@ -1,0 +1,151 @@
+#!/bin/bash
+
+#set -e
+
+CPUS="32"
+EXE=$(basename $0)
+PREFIX="unmapped"
+FORCE=0
+
+#............................................................................
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function usage {
+  msg "Name:\n  $EXE - identify unmapped reads to a reference genome"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] <ref.fasta> <R1.fq.gz> <R2.fq.gz> <outdir>"
+  msg "Parameters:"
+  msg "  <ref.fasta> FASTA reference genome"
+  msg "  <R1.fq.gz>  FASTQ with read 1, optionally .gz compressed"
+  msg "  <R2.fq.gz>  FASTQ with read 2, optionally .gz compressed"
+  msg "  <outdir>    folder to put results in"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -f          Allow overwriting of existing <outdir>"
+  msg "  -t N        Allow up to N parallel threads to be used (default=$CPUS)"
+  exit 1 
+}
+
+#...........................................................................
+
+while getopts 'hft:' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    f)
+      FORCE=1
+      ;;    
+    t)
+      CPUS=$OPTARG
+      [[ $CPUS =~ ^[1-9][0-9]*$ ]] || err "-t must be an integer > 0, not '$CPUS'"
+      ;;
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 4 ]; then
+  usage
+fi
+
+REF="$(readlink -f "$1")"
+R1="$(readlink -f "$2")" 
+R2="$(readlink -f "$3")"
+OUTDIR="$(readlink -f "$4")"
+
+banner "Checking command line parameters"
+
+[ -d "$OUTDIR" -a "$FORCE" -eq "0" ] && err "Output folder already exists: $OUTDIR"
+[ ! -r "$REF" ] && err "Can not read reference file: $REF"
+[ ! -r "$R1" ] && err "Can not access R1 read file: $R1"
+[ ! -r "$R2" ] && err "Can not access R2 read file: $R2"
+
+msg "Reference genome: $REF"
+msg "Read 1 file: $R1"
+msg "Read 2 file: $R2"
+msg "Will use $CPUS CPU threads"
+msg "Output folder: $OUTDIR"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in bwa samtools pigz megahit fa ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Indexing reference"
+
+mkdir -v -p "$OUTDIR"
+exitOnFailure $? "mkdir"
+
+INDEX="$OUTDIR/ref"
+bwa index -p "$INDEX" "$REF"
+
+#............................................................................
+banner "Aligning reads"
+
+READS="$OUTDIR/unmapped_pairs.fastq"
+
+bwa mem -t "$CPUS" "$INDEX" "$R1" "$R2" \
+  | samtools view -S -b -u -f 12 -F 256 - \
+  | samtools bam2fq - \
+  > "$READS"
+
+exitOnFailure $? "bwa / samtools"
+
+#............................................................................
+banner "Assembling unmapped reads"
+
+megahit --12 "$READS" --presets bulk -t "$CPUS" -o "$OUTDIR/megahit"
+exitOnFailure $? "megahit"
+mv -v "$OUTDIR/megahit/final.contigs.fa" "$OUTDIR/contigs.fa"
+rm -fr "$OUTDIR/megahit"
+
+#............................................................................
+banner "Compressing reads"
+
+rm -f -v "${READS}.gz"
+pigz -v -p "$CPUS" "$READS"
+exitOnFailure $? "pigz"
+
+#............................................................................
+banner "Removing temporary files"
+
+rm -f -v ${INDEX}.*
+rm -fr -v "$OUTDIR/megahit"
+
+#............................................................................
+
+banner "Finished"
+fa "$OUTDIR/contigs.fa"
+msg "Results in: $OUTDIR"
+
