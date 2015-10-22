@@ -21,12 +21,12 @@ my %template = (
   'nullarbor'   => "%i\t%1\t%2\n",
   'snippy'      => "--R1 %1 --R2 %2",
   'bwamem'      => "%1 %2",
-  'megahit'	=> "--input-cmd 'gzip -c -d -f %1 %2'",
+  'megahit'	=> "--presets bulk --min-contig-len 500 -1 %1 -2 %2",
   'velvet'      => "-shortPaired -fmtAuto -separate %1 %2",
   'spades'      => "-1 %1 -2 %1",
   'bowtie'      => "-1 %1 -2 %1",
   'pear'        => "-f %1 -r %2",
-  'kraken'      => "--paired %1 %2",
+  'kraken'      => "kraken --preload --paired %1 %2 | kraken-report > %i.kraken.tab\n",
   'symlink'     => "ln -s %1 %i_R1.fq.gz ; ln -s %2 %i_R2.fq.gz\n",
   'dirlink'     => "mkdir %i && ln -s %1 %i/%i_R1.fq.gz && ln -s %2 %i/%i_R2.fq.gz\n",
 );
@@ -46,8 +46,10 @@ sub list_formats {
 # command line
 
 my $verbose = 0;
+my $idfile = '';
 my $quiet   = 0;
 my $format  = 'nullarbor';
+my $skip = 0;
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -57,12 +59,15 @@ Synopsis:
   Retrieve path to read files of MDU sequences isolates
 Usage: 
   $EXE [options] [--format XXX] <ID1> [<ID2> ...]
+  $EXE [options] [--format XXX] --idfile <file_of_IDs.txt>
 Options:
   --help	This help
   --verbose	Extra debugging output
   --quiet	No screen output
   --list        Describe the supported formats
   --format	Output style: @fmt (DEFAULT=$format)
+  --idfile      File of IDs to use
+  --skip        Skip over missing isolates, don't quit with error
 USAGE
   exit;
 }
@@ -72,7 +77,9 @@ GetOptions(
   "verbose"  => \$verbose,
   "quiet"    => \$quiet,
   "format=s" => \$format,
+  "idfile=s" => \$idfile,
   "list"     => \&list_formats,
+  "skip"     => \$skip,
 ) 
 or usage();
 
@@ -83,18 +90,31 @@ exists $template{$format} or err("Invalid --format '$format'");
 #-------------------------------------------------------------------
 # main script
 
-@ARGV or err("No isolate IDs provided.");
+my @ID;
+
+if ($idfile) {
+  open IDFILE, '<', $idfile or err("Could not read --idfile $idfile");
+  @ID = <IDFILE>; # slurp all lines
+  chomp @ID;
+}
+else {
+  @ID = @ARGV;
+}
+
+@ID or err("No isolate IDs provided.");
 my $fmt = $template{$format};
-if ($fmt !~ m/\n$/ and @ARGV > 1) {
+if ($fmt !~ m/\n$/ and @ID > 1) {
   err("--format $format is only suitable for one ID at a time");
 }
 
 my %seen;
 
-for my $name (@ARGV) {
-  my $id = MDU->id($name) or err("Invalid ID: $name");
-  my @reads = MDU->reads($id) or err("No/multiple paired reads: $name");
-  $seen{$id}++ and err("Duplicate ID: $id (from $name)");
+my $blurt = $skip ? \&msg : \&err;
+
+for my $name (@ID) {
+  my $id = MDU->id($name) or do { $blurt->("Invalid ID: $name"); next };
+  my @reads = MDU->reads($id) or do { $blurt->("No/multiple paired reads: $name"); next };
+  $seen{$id}++ and do { $blurt->("Duplicate ID: $id (from $name)"); next };
   my $line = $fmt;
   $line =~ s/%i/$id/;
 #  $line =~ s/%1/\Q$reads[0]\E/;
@@ -106,3 +126,6 @@ for my $name (@ARGV) {
 }
 
 #-------------------------------------------------------------------
+
+
+
