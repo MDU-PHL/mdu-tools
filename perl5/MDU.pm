@@ -29,8 +29,10 @@ sub all_ids {
 
 sub id {
   my($self, $string) = @_;
-  $string =~ m/([12]\d{3}-\d{5})\b/;
-  return $1;
+#  $string =~ m/([12]\d{3}-\d{5}([_-]\S+)?|\d+)\b/;
+#  msg("id($string) = $1");
+  return $string;
+#  return $1;
 }
 
 #----------------------------------------------------------------------
