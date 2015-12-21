@@ -1,0 +1,155 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $quiet   = 0;
+my $threads = 8;
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"USAGE";
+Synopsis:
+  Generate a Makefile to QC all the MDU isolates
+Usage: 
+  $EXE [options] > Makefile
+Options:
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --quiet	No screen output ($quiet)
+  --threads	Threads per process ($threads)
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"     => \&usage,
+  "verbose"  => \$verbose,
+  "quiet"    => \$quiet,
+  "threads=i"  => \$threads,
+) 
+or usage();
+
+MDU::Logger->quiet($quiet);
+
+#-------------------------------------------------------------------
+# main script
+
+msg("Analyzing", MDU->dir);
+my @ID = MDU->all_ids();
+my $count=0;
+my %db;
+
+for my $name (sort @ID) {
+  my $id = MDU->id($name) or err("Invalid ID: $name");
+  my @reads = MDU->reads($id);
+  if (@reads != 2) {
+    msg("skipping $id as not looking like R1 R2:", MDU->dir($id));
+    next;
+  }
+  msg("#$count $id @reads") if $verbose;
+  $db{$id} = [ @reads ];
+  $count++;
+}
+msg("Found $count isolates.");
+
+
+#-------------------------------------------------------------------
+# construct makefile
+
+my %make;
+my $make_target = '$@';
+my $make_dep = '$<';
+my $make_deps = '$^';
+
+my @id = sort keys %db;
+
+$make{all} = {
+  DEP => \@id,
+};
+
+for my $id (@id) {
+  $make{$id} = {
+    DEP => [ "$id/timestamp.txt", "$id/species.txt", "$id/mlst.tab" ],
+    PHONY => 1,
+  };
+  $make{"$id/timestamp.txt"} = {
+    DEP => $db{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "date -R > $make_target",
+    ]
+  };
+  $make{"$id/kraken.tab"} = {
+    DEP => $db{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "kraken --threads $threads --preload --paired $make_deps | kraken-report > $make_target",
+    ]
+  };
+  $make{"$id/species.txt"} = {
+    DEP => "$id/kraken.tab",
+    CMD => [ 
+      "grep -P \"\tS\t\" $make_dep | sort -k3nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
+    ]
+  };
+  $make{"$id/contigs.fa"} = {
+    DEP => $db{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "rm -fr $id/megahit",
+      "megahit --min-count 3 --k-list 41 -t $threads --memory 0.25 -1 '$db{$id}->[0]' -2 '$db{$id}->[1]' --out-dir '$id/megahit' --min-contig-len 500",
+      "fa-add_new_ids.pl --moveid --format '$id.ctg%05d' $id/megahit/final.contigs.fa > $make_target",
+      "rm -fr $id/megahit",
+    ]
+  };
+  $make{"$id/mlst.tab"} = {
+    DEP => "$id/contigs.fa",
+    CMD => [ 
+      "mlst $make_dep > $make_target",
+    ]
+  };
+}
+
+
+write_makefile(\%make);
+
+#-------------------------------------------------------------------
+# write makefile
+
+sub write_makefile {
+  my($make, $fh) = @_;
+  $fh = \*STDOUT if not defined $fh;
+
+  print $fh "SHELL := /bin/bash\n";
+  print $fh "MAKEFLAGS += --no-builtin-rules\n";
+  print $fh "MAKEFLAGS += --no-builtin-variables\n";
+  print $fh ".SUFFIXES:\n";
+
+  for my $target ('all', sort grep { $_ ne 'all' } keys %$make) {
+    print $fh "\n";
+    my $rule = $make->{$target}; # short-hand
+    my $dep = $rule->{DEP};
+    $dep = ref($dep) eq 'ARRAY' ? (join ' ', @$dep) : $dep;
+    $dep ||= '';
+    print $fh ".PHONY: $target\n" if $rule->{PHONY} or ! $rule->{DEP};
+    print $fh "$target: $dep\n";
+    if (my $cmd = $rule->{CMD}) {
+      my @cmd = ref $cmd eq 'ARRAY' ? @$cmd : ($cmd);
+      print $fh map { "\t$_\n" } @cmd;
+    }
+  }
+}
