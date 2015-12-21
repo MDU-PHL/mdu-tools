@@ -1,0 +1,103 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $quiet   = 0;
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"USAGE";
+Synopsis:
+  Generate a spreadsheet from an MDU QC folder structure
+Usage: 
+  $EXE [options] > Makefile
+Options:
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --quiet	No screen output ($quiet)
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"      => \&usage,
+  "verbose"   => \$verbose,
+  "quiet"     => \$quiet,
+) 
+or usage();
+
+MDU::Logger->quiet($quiet);
+
+#-------------------------------------------------------------------
+
+my @COLS = qw(
+  ISOLATE SPECIES SCHEME ST READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+);
+
+my $count=0;
+opendir(my $dh, '.');
+while ( my $dir = readdir($dh) ) {
+  next unless -d $dir and $dir !~ m/^\./;
+  if ($count == 0) {
+    print join(",", @COLS),"\n";
+  }
+  $count++;
+  msg(" #$count $dir");
+  process_id($dir);
+}
+closedir($dh);
+
+#-------------------------------------------------------------------
+
+sub process_id {
+  my($id) = @_;
+  my %row;
+  $row{ISOLATE} = $id;
+
+  my($species) = qx(cat $id/species.txt);
+  chomp $species;
+  $row{SPECIES} = $species;
+  
+  open MLST, '<', "$id/mlst.tab";
+  my @mlst = split m/\t/, scalar(<MLST>);
+  chomp @mlst;
+  $row{SCHEME} = $mlst[1];
+  $row{ST} = $mlst[2];
+  
+  open YIELD, '<', "$id/yield.tab";
+  while (<YIELD>) {
+    chomp;
+    my @x = split m/\t/;
+    $row{ uc($x[0]) } = $x[1];
+  }
+  delete $row{FILES};
+  
+  $row{CONTIGS} = qx(grep -c '>' $id/contigs.fa);
+  chomp $row{CONTIGS};
+  $row{GENOME_SIZE} = -s "$id/contigs.fa"; # approx
+  
+  print join(",", map { $row{$_} } @COLS), "\n";
+}
+
+#-------------------------------------------------------------------
+
+
+
+#-------------------------------------------------------------------
+
+
+
