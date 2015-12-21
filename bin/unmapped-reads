@@ -32,12 +32,12 @@ function exitOnFailure {
 function usage {
   msg "Name:\n  $EXE - identify unmapped reads to a reference genome"
   msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
-  msg "Usage:\n  $EXE [options] <ref.fasta> <R1.fq.gz> <R2.fq.gz> <outdir>"
+  msg "Usage:\n  $EXE [options] <outdir> <ref.fasta> <R1.fq.gz> [R2.fq.gz]"
   msg "Parameters:"
   msg "  <ref.fasta> FASTA reference genome"
-  msg "  <R1.fq.gz>  FASTQ with read 1, optionally .gz compressed"
-  msg "  <R2.fq.gz>  FASTQ with read 2, optionally .gz compressed"
   msg "  <outdir>    folder to put results in"
+  msg "  <R1.fq.gz>  FASTQ with read 1, optionally .gz compressed"
+  msg "  <R2.fq.gz>  FASTQ with read 2, optionally .gz compressed (optional)"
   msg "Options:"
   msg "  -h          Show this help"
   msg "  -f          Allow overwriting of existing <outdir>"
@@ -67,25 +67,31 @@ shift $((OPTIND-1))
 
 # read our mandatory positional parameters
 
-if [ $# -lt 4 ]; then
+if [ $# -lt 3 ]; then
   usage
 fi
 
-REF="$(readlink -f "$1")"
-R1="$(readlink -f "$2")" 
-R2="$(readlink -f "$3")"
-OUTDIR="$(readlink -f "$4")"
-
 banner "Checking command line parameters"
 
+OUTDIR="$(readlink -f "$1")"
 [ -d "$OUTDIR" -a "$FORCE" -eq "0" ] && err "Output folder already exists: $OUTDIR"
+
+REF="$(readlink -f "$2")"
 [ ! -r "$REF" ] && err "Can not read reference file: $REF"
+
+R1="$(readlink -f "$3")" 
 [ ! -r "$R1" ] && err "Can not access R1 read file: $R1"
-[ ! -r "$R2" ] && err "Can not access R2 read file: $R2"
+
+if [ "$4" == "" ]; then
+  R2=""
+else 
+  R2="$(readlink -f "$4")"
+  [ ! -r "$R2" ] && err "Can not access R2 read file: $R2"
+fi
 
 msg "Reference genome: $REF"
-msg "Read 1 file: $R1"
-msg "Read 2 file: $R2"
+msg "R1: $R1"
+msg "R2: $R2"
 msg "Will use $CPUS CPU threads"
 msg "Output folder: $OUTDIR"
 
@@ -113,10 +119,9 @@ bwa index -p "$INDEX" "$REF"
 #............................................................................
 banner "Aligning reads"
 
-READS="$OUTDIR/unmapped_pairs.fastq"
-
-bwa mem -t "$CPUS" "$INDEX" "$R1" "$R2" \
-  | samtools view -S -b -u -f 12 -F 256 - \
+READS="$OUTDIR/unmapped.fastq"
+bwa mem -t "$CPUS" "$INDEX" $R1 $R2 \
+  | samtools view -S -b -u -f 4 -F 256 - \
   | samtools bam2fq - \
   > "$READS"
 
@@ -125,7 +130,8 @@ exitOnFailure $? "bwa / samtools"
 #............................................................................
 banner "Assembling unmapped reads"
 
-megahit --12 "$READS" --presets bulk -t "$CPUS" -o "$OUTDIR/megahit"
+rm -fr "$OUTDIR/megahit"
+megahit -r "$READS" --presets bulk -t "$CPUS" -o "$OUTDIR/megahit"
 exitOnFailure $? "megahit"
 mv -v "$OUTDIR/megahit/final.contigs.fa" "$OUTDIR/contigs.fa"
 rm -fr "$OUTDIR/megahit"
