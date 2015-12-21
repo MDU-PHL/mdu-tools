@@ -9,7 +9,8 @@ use Data::Dumper;
 use Getopt::Long;
 use FindBin;
 use lib "$FindBin::RealBin/../perl5";
-use MDU qw(msg err);
+use MDU;
+use MDU::Logger qw(msg err);
 
 #-------------------------------------------------------------------
 # command line
@@ -42,7 +43,7 @@ GetOptions(
 ) 
 or usage();
 
-MDU->quiet($quiet);
+MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
 # main script

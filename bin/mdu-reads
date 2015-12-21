@@ -9,7 +9,9 @@ use Data::Dumper;
 use Getopt::Long;
 use FindBin;
 use lib "$FindBin::RealBin/../perl5";
-use MDU qw(msg err);
+use MDU;
+use MDU::Logger qw(msg err);
+use Cwd qw(abs_path);
 
 #-------------------------------------------------------------------
 # templates for outputs
@@ -23,8 +25,8 @@ my %template = (
   'bwamem'      => "%1 %2",
   'megahit'	=> "--presets bulk --min-contig-len 500 -1 %1 -2 %2",
   'velvet'      => "-shortPaired -fmtAuto -separate %1 %2",
-  'spades'      => "-1 %1 -2 %1",
-  'bowtie'      => "-1 %1 -2 %1",
+  'spades'      => "-1 %1 -2 %2",
+  'bowtie'      => "-1 %1 -2 %2",
   'pear'        => "-f %1 -r %2",
   'kraken'      => "kraken --preload --paired %1 %2 | kraken-report > %i.kraken.tab\n",
   'symlink'     => "ln -s %1 %i_R1.fq.gz ; ln -s %2 %i_R2.fq.gz\n",
@@ -49,6 +51,7 @@ my $verbose = 0;
 my $idfile = '';
 my $quiet   = 0;
 my $format  = 'nullarbor';
+my $rootdir = $MDU::MDUDIR;
 my $skip = 0;
 
 sub usage {
@@ -66,6 +69,7 @@ Options:
   --quiet	No screen output
   --list        Describe the supported formats
   --format	Output style: @fmt (DEFAULT=$format)
+  --rootdir     Folder where reads are contained (DEFAULT=$rootdir)
   --idfile      File of IDs to use
   --skip        Skip over missing isolates, don't quit with error
 USAGE
@@ -78,17 +82,20 @@ GetOptions(
   "quiet"    => \$quiet,
   "format=s" => \$format,
   "idfile=s" => \$idfile,
+  "rootdir=s" => \$rootdir,
   "list"     => \&list_formats,
   "skip"     => \$skip,
 ) 
 or usage();
 
-MDU->quiet($quiet);
+MDU::Logger->quiet($quiet);
 
 exists $template{$format} or err("Invalid --format '$format'");
 
 #-------------------------------------------------------------------
 # main script
+
+$MDU::MDUDIR = abs_path( $rootdir );
 
 my @ID;
 

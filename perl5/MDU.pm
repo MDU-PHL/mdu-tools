@@ -5,8 +5,7 @@ use base Exporter;
 
 #----------------------------------------------------------------------
 
-my $MDUDIR = '/mnt/seq/MDU/READS';
-our $quiet = 0;
+our $MDUDIR = '/mnt/seq/MDU/READS';
 
 #----------------------------------------------------------------------
 
@@ -44,30 +43,6 @@ sub reads {
   @file = sort @file; # ensure R1 before R2
   return @file if @file==2;
   return;
-}
-
-#----------------------------------------------------------------------
-
-sub quiet {
-  my($self, $value) = @_;
-  $quiet = $value if defined $value;
-  return $quiet;
-}
-
-#----------------------------------------------------------------------
-
-sub msg {
-#  my $self = shift;
-  return if $quiet;
-  print STDERR "@_\n";
-}
-      
-#----------------------------------------------------------------------
-
-sub err {
-#  my $self = shift;
-  msg('ERROR:', @_);
-  exit(1);
 }
 
 #----------------------------------------------------------------------
