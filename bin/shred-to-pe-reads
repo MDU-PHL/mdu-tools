@@ -1,6 +1,4 @@
 #!/bin/bash
-
-
 #set -e
 
 EXE=$(basename $0)
@@ -8,6 +6,7 @@ FORCE=0
 COVERAGE=25
 
 #............................................................................
+# Reusable functions
 
 function banner {
   HBAR="--------------------------------------------------------------------"
@@ -44,6 +43,7 @@ function usage {
 }
 
 #...........................................................................
+# Parse the command line options
 
 while getopts 'hfc:' opt ; do
   case $opt in
@@ -84,7 +84,7 @@ msg "Coverage: $COVERAGE"
 #............................................................................
 banner "Checking external dependencies"
 
-for EXE in art_illumina pigz ; do
+for EXE in art_illumina pigz gzip ; do
   WHERE=$(which $EXE)
   if [ "$WHERE" != "" ]; then
     msg "Checking for $EXE - found $WHERE"
@@ -104,12 +104,13 @@ exitOnFailure $? "mkdir"
 banner "Converting $REF to FASTA"
 
 # force decompress and let readseq auto-detect input and write as FASTA
-zcat -f "$REF" | readseq -pipe -f8 > $OUTDIR/$SHRED.fa
+gzip -c -d -f "$REF" | readseq -pipe -f8 > $OUTDIR/$SHRED.fa
 exitOnFailure $? "readseq"
 
 #............................................................................
 banner "Simulating reads"
 
+# this is the read simulation software, I disable indels
 
 art_illumina --in "$OUTDIR/$SHRED.fa" --out "$OUTDIR/$SHRED" --noALN \
 	-ss HS25 --fcov "$COVERAGE" --len 150 --mflen 500 --sdev 20 --paired \
