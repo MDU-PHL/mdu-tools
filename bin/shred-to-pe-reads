@@ -1,0 +1,141 @@
+#!/bin/bash
+
+
+#set -e
+
+EXE=$(basename $0)
+FORCE=0
+COVERAGE=25
+
+#............................................................................
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function usage {
+  msg "Name:\n  $EXE - simulate Illumina PE reads from an assembled genome"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] <outdir> <ref.fasta | ref.gbk>"
+  msg "Parameters:"
+  msg "  <ref.fasta> FASTA reference genome"
+  msg "  <outdir>    folder to put results in"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -c          Coverage ($COVERAGE)"
+  msg "  -f          Allow overwriting of existing <outdir>"
+  exit 1 
+}
+
+#...........................................................................
+
+while getopts 'hfc:' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    f)
+      FORCE=1
+      ;;    
+    c)
+      COVERAGE=$OPTARG
+      ;;
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 2 ]; then
+  usage
+fi
+
+#............................................................................
+banner "Checking command line parameters"
+
+OUTDIR="$(readlink -f "$1")"
+[ -d "$OUTDIR" -a "$FORCE" -eq "0" ] && err "Output folder already exists: $OUTDIR"
+
+REF="$(readlink -f "$2")"
+[ ! -r "$REF" ] && err "Can not read reference file: $REF"
+
+msg "Reference genome: $REF"
+msg "Output folder: $OUTDIR"
+msg "Coverage: $COVERAGE"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in art_illumina pigz ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Makinout output folder: $OUTDIR"
+
+SHRED="shred"
+mkdir -p "$OUTDIR"
+exitOnFailure $? "mkdir"
+
+#............................................................................
+banner "Converting $REF to FASTA"
+
+zcat -f "$REF" | readseq -pipe -f8 > $OUTDIR/$SHRED.fa
+exitOnFailure $? "readseq"
+
+#............................................................................
+banner "Simulating reads"
+
+
+art_illumina --in "$OUTDIR/$SHRED.fa" --out "$OUTDIR/$SHRED" --noALN \
+	-ss HS25 --fcov "$COVERAGE" --len 150 --mflen 500 --sdev 20 --paired \
+	-ir 0 -ir2 0 -dr 0 -dr2 0 -nf 0
+
+exitOnFailure $? "art_illumina"
+
+ls -l "$OUTDIR"
+
+#............................................................................
+banner "Compressing reads"
+
+PREFIX=$(basename "$OUTDIR")
+
+for READ in 1 2 ; do 
+  pigz < "$OUTDIR/${SHRED}${READ}.fq" > "$OUTDIR/${PREFIX}_R${READ}.fq.gz"
+  exitOnFailure $? "pigz R$READ"
+done
+
+ls -l "$OUTDIR"/*.gz
+
+#............................................................................
+banner "Removing temporary files"
+
+rm -f -v ${OUTDIR}/${SHRED}*
+
+#............................................................................
+banner "Finished"
+msg "Results in: $OUTDIR"
+ls -l "$OUTDIR"
