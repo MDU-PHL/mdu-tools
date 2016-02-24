@@ -34,7 +34,7 @@ function usage {
   msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
   msg "Usage:\n  $EXE [options] <outdir> <ref.fasta | ref.gbk>"
   msg "Parameters:"
-  msg "  <ref.fasta> FASTA reference genome"
+  msg "  <ref>       FASTA or GBK reference genome (can be .GZ compressed)"
   msg "  <outdir>    folder to put results in"
   msg "Options:"
   msg "  -h          Show this help"
@@ -96,13 +96,14 @@ done
 #............................................................................
 banner "Makinout output folder: $OUTDIR"
 
-SHRED="shred"
+SHRED="__tmp_shred__"
 mkdir -p "$OUTDIR"
 exitOnFailure $? "mkdir"
 
 #............................................................................
 banner "Converting $REF to FASTA"
 
+# force decompress and let readseq auto-detect input and write as FASTA
 zcat -f "$REF" | readseq -pipe -f8 > $OUTDIR/$SHRED.fa
 exitOnFailure $? "readseq"
 
