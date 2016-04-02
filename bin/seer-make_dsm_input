@@ -1,0 +1,135 @@
+#!/bin/bash
+
+set -e
+
+EXE=$(basename $0)
+MINABUND=1
+MINSAMP=2
+KMER=31
+OUTFILE=dsm_input.txt.gz
+TEMPDIR=$(mktemp --tmpdir -d "${EXE}-tmp-XXXXXX")
+# make sure the above temp folder is deleted at exit or error
+#trap "rm -frv '$TEMPDIR'" exit
+
+#............................................................................
+# Reusable functions
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function usage {
+  msg "Name:\n  $EXE - use DSK to make a Seer DSM input file"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] *.fasta"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -k          K-mer size ($KMER)"
+  msg "  -a          Minumum k-mer abdundance ($MINABUND)"
+  msg "  -s          Minumum samples ($MINSAMP)"
+  msg "  -o          Final output file ($OUTFILE)"
+  exit 1 
+}
+
+#...........................................................................
+# Parse the command line options
+
+while getopts 'hk:a:s:o:' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    k)
+      KMER=$OPTARG
+      ;;    
+    o)
+      OUTFILE=$OPTARG
+      ;;    
+    s)
+      MINSAMP=$OPTARG
+      ;;    
+    a)
+      MINABUND=$OPTARG
+      ;;
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 2 ]; then
+  usage
+fi
+
+#............................................................................
+banner "Checking command line parameters"
+
+if [ -f "$OUTFILE" ]; then
+  err "Output file '$OUTFILE' already exists!"
+fi
+
+msg "KMER     : $KMER"
+msg "MINABUND : $MINABUND"
+msg "MINSAMP  : $MINSAMP"
+msg "OUTFILE  : $OUTFILE"
+msg "FILES    : $#"
+msg "TEMPDIR  : $TEMPDIR"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in dsk dsk2ascii combineKmers pigz ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Processing $# FASTA files"
+
+TABFILE="$TEMPDIR/combine.tab"
+
+for FASTA in $* ; do
+  msg "Processing: $FASTA"
+  ID=$(basename $FASTA)
+  dsk -verbose 0 -kmer-size $KMER -file "$FASTA" -abundance-min "$MINABUND" -out "$TEMPDIR/$ID.dsk" > "$TEMPDIR/$ID.dsk.log"
+  exitOnFailure $? "dsk $FASTA"
+  dsk2ascii -file "$TEMPDIR/$ID.dsk.h5" -out "$TEMPDIR/$ID.dsk.txt" > "$TEMPDIR/$ID.dsk2ascii.log"
+  exitOnFailure $? "dsk2ascii $FASTA"
+  echo -e "$ID\t$TEMPDIR/$ID.dsk.txt" >> "$TABFILE"
+done
+
+#............................................................................
+banner "Combining $# K-mer samples into $OUTFILE"
+
+OUTFILE_NOGZ=$(basename "$OUTFILE" .gz)
+combineKmers --min_samples "$MINSAMP" -r "$TABFILE" -o "$OUTFILE_NOGZ"
+exitOnFailure $? "combineKmers"
+
+#............................................................................
+banner "Finished"
+
+msg "Results in: $OUTFILE"
+ls -l "$OUTFILE"
+
