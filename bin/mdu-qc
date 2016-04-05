@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Cwd qw(abs_path);
 
 #-------------------------------------------------------------------
 # libraries
@@ -20,6 +21,7 @@ my $quiet   = 0;
 my $threads = 8;
 my $kmer    = 31;
 my $batches = 3;
+my $rootdir = $MDU::MDUDIR;
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -35,6 +37,7 @@ Options:
   --threads N	Threads per process ($threads)
   --kmer    K	K-mer size for assembly ($kmer)
   --batches B	Generate batch targets ($batches)
+  --rootdir D   Folder where reads are contained ($rootdir)
 USAGE
   exit;
 }
@@ -44,6 +47,7 @@ GetOptions(
   "verbose"   => \$verbose,
   "quiet"     => \$quiet,
   "threads=i" => \$threads,
+  "rootdir=s" => \$rootdir,
   "kmer=i"    => \$kmer,
 ) 
 or usage();
@@ -52,6 +56,8 @@ MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
 # main script
+
+$MDU::MDUDIR = abs_path( $rootdir ) if $rootdir;
 
 msg("Analyzing", MDU->dir);
 my @ID = MDU->all_ids();
