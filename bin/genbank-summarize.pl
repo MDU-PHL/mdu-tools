@@ -9,7 +9,7 @@ use Data::Dumper;
 use Getopt::Long;
 use FindBin;
 use lib "$FindBin::RealBin/../perl5";
-use MDU qw(msg err);
+use MDU::Logger qw(msg err);
 #use Regexp::Common;
 
 #-------------------------------------------------------------------
@@ -38,20 +38,21 @@ GetOptions(
 ) 
 or usage();
 
-MDU->quiet($quiet);
+MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
 # main script
-my @COL = qw(FILE ORG STRAIN CTGS BP GENES ASM COV TECH);
+my @COL = qw(FILE ORG STRAIN CTGS BP MAX_CTG GENES ASM COV TECH);
 print join("\t", @COL), "\n";
 for my $gbk (@ARGV) {
   msg("Trying: $gbk");
   open IN, "-|", "gzip -c -d \Q$gbk\E" or err("Could not read: $gbk");
-  my %data = (FILE=>$gbk, GENES=>0, BP=>0, CTGS=>0);
+  my %data = (FILE=>$gbk, GENES=>0, BP=>0, CTGS=>0, MAX_CTG=>0);
   while (<IN>) {
     if (m/^LOCUS\s+\S+\s+(\d+)/) {
       $data{CTGS}++;
       $data{BP} += $1;
+      $data{MAX_CTG} = $1 if $1 > $data{MAX_CTG};
     }
     elsif (m/^     gene            /) {
       $data{GENES}++;
