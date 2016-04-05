@@ -39,10 +39,10 @@ sub id {
 sub reads {
   my($self, $name) = @_;
   my $id = MDU->id($name);
-  my @file = glob( MDU->dir . "/$id/*.f*q.gz" );
+  my $glob = MDU->dir . "/$id/*.f*q.gz";
+  my @file = glob($glob);
   @file = sort @file; # ensure R1 before R2
-  return @file if @file==2;
-  return;
+  return @file;
 }
 
 #----------------------------------------------------------------------
