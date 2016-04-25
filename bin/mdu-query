@@ -85,10 +85,10 @@ $pass ||= 1E9;
 my @match;
 for my $id (keys %db) {
   my $score=0;
-  $score++ if $species and $db{$id}{SPECIES} =~ m/$species/;
-  $score++ if $scheme  and $db{$id}{SCHEME}  =~ m/$scheme/;
+  $score++ if $species and $db{$id}{SPECIES} =~ m/$species/i;
+  $score++ if $scheme  and $db{$id}{SCHEME}  =~ m/$scheme/i;
   $score++ if $seqtype and $db{$id}{ST}      eq $seqtype;
-  $score++ if $isolate and $db{$id}{ISOLATE} =~ m/$isolate/;
+  $score++ if $isolate and $db{$id}{ISOLATE} =~ m/$isolate/i;
   $score++ if $date    and $db{$id}{ANALYSIS_DATE} =~ m/$date/;
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
