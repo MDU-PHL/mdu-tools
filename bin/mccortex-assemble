@@ -1,0 +1,195 @@
+#!/bin/bash
+
+#............................................................................
+# Defaults
+
+set -e
+
+EXE=$(basename $0)
+KMER=63
+THREADS=18
+MEMORY=4G
+PREFIX=mccortex
+CORTEX=mccortex63
+OVERLAP=0
+TEMPDIR=$(mktemp --tmpdir -d "${EXE}-tmp-XXXXXX")
+# make sure the above temp folder is deleted at exit or error
+trap "rm -fr '$TEMPDIR'" exit
+
+#............................................................................
+# Reusable functions
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function usage {
+  msg "Name:\n  $EXE - use McCortex to assemble contigs from PE reads"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] <R1.fq.gz> <R2.fq.gz>"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -x          McCortex executable ($CORTEX)"
+  msg "  -t          Threads to use ($THREADS)"
+  msg "  -m          RAM to use ($MEMORY)"
+  msg "  -k          K-mer size ($KMER)"
+  msg "  -p          Prefix for output files ($PREFIX)"
+  msg "  -o          Overlap reads with PEAR first ($OVERLAP)"
+  msg "Have fun!"
+  exit 1 
+}
+
+#...........................................................................
+# Parse the command line options
+
+while getopts 'hk:t:m:k:x:o' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    x)
+      CORTEX=$OPTARG
+      ;;    
+    t)
+      THREADS=$OPTARG
+      ;;    
+    m)
+      MEMORY=$OPTARG
+      ;;
+    k)
+      KMER=$OPTARG
+      ;;    
+    p)
+      PREFIX=$OPTARG
+      ;;    
+    o)
+      OVERLAP=1
+      ;;    
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 2 ]; then
+  usage
+fi
+
+R1="$(readlink -f "$1")"
+R2="$(readlink -f "$2")"
+
+#............................................................................
+banner "Checking command line parameters"
+
+msg "TEMPDIR  : $TEMPDIR"
+msg "R1       : $R1"
+msg "R2       : $R2"
+msg "KMER     : $KMER"
+msg "MEMORY   : $MEMORY"
+msg "THREADS  : $THREADS"
+msg "PREFIX   : $PREFIX"
+msg "CORTEX   : $CORTEX"
+msg "OVERLAP  : $OVERLAP"
+
+[[ "$KMER" -lt 64 ]] || err "Kmer -k $KMER must be less than 64"
+#[[ -f "$OUTFILE" ]] && err "Output file '$OUTFILE' already exists!"
+[[ -r "$R1" ]] || err "Can't read R1 : $R1"
+[[ -r "$R2" ]] || err "Can't read R2 : $R2"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in $CORTEX pear ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+
+SAVEDIR=$PWD
+cd "$TEMPDIR"
+
+DELETE="rm -fv"
+OPTS="-t $THREADS -m $MEMORY"
+
+READSET="-2 $R1:$R2"
+
+if [ "$OVERLAP" == "1" ]; then
+  banner "Overlapping reads"
+  pear -v 20 -n "$KMER" -q 10 -u 0 -y "$MEMORY" -j "$THREADS" -f "$R1" -r "$R2" -o olap
+  exitOnFailure $? "pear"
+  READSET="-1 olap.assembled.fastq -2 olap.unassembled.forward.fastq:olap.unassembled.reverse.fastq"
+fi
+
+banner "Building graph"
+$CORTEX build $OPTS -k "$KMER" -s Assembly --fq-cutoff 5 $READSET raw.ctx 2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex build"
+
+banner "Cleaning graph"
+$CORTEX clean $OPTS -o clean.ctx raw.ctx 2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex clean"
+$DELETE raw.ctx
+
+banner "Making unitigs (.FASTA)"
+$CORTEX unitigs $OPTS -o unitigs.fa clean.ctx  2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex unitigs (FASTA)"
+
+banner "Making unitis (.GFA)"
+$CORTEX unitigs $OPTS --gfa -o unitigs.gfa clean.ctx  2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex unitigs (GFA)"
+
+banner "Infer edges"
+$CORTEX inferedges $OPTS -o infer.ctx clean.ctx 2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex inferedges"
+$DELETE clean.ctx
+
+banner "Threading reads"
+$CORTEX thread $OPTS -o infer.ctp.gz $READSET infer.ctx  2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex thread"
+
+banner "Cleaning links"
+$CORTEX links --clean 0 -o clean.ctp.gz infer.ctp.gz 2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex links"
+
+banner "Making contigs"
+$CORTEX contigs $OPTS -o contigs.dupes.fa -p clean.ctp.gz infer.ctx  2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex contigs"
+
+banner "Cleaning contigs"
+$CORTEX rmsubstr $OPTS -k "$KMER" -o contigs.fa contigs.dupes.fa  2>&1 | tee -a "$PREFIX.log"
+exitOnFailure $? "cortex rmsubstr"
+
+banner "Saving output files"
+cd "$SAVEDIR"
+cp -fv "$TEMPDIR/unitigs.fa" "$PREFIX.unitigs.fa"
+cp -fv "$TEMPDIR/unitigs.gfa" "$PREFIX.unitigs.gfa"
+cp -fv "$TEMPDIR/contigs.fa" "$PREFIX.contigs.fa"
+cp -fv "$TEMPDIR/$PREFIX.log" "$PREFIX.log"
+
+#............................................................................
+banner "Finished"
+
+#msg "Results here:"
+#ls -l "$SAVEDIR/$PREFIX.*"
