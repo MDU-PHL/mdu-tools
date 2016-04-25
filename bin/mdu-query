@@ -20,7 +20,7 @@ my $verbose = 0;
 my $db_file = $MDU::MDUDIR."/../QC/mdu-wgs.csv";
 my $logical_or = 0;
 my $tab = 0;
-my($species, $scheme, $seqtype, $isolate, $date, $tab);
+my($species, $scheme, $seqtype, $isolate, $date);
 
 sub usage {
   my $EXE = $FindBin::RealScript;
