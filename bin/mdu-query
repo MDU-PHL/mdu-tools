@@ -93,6 +93,7 @@ for my $id (keys %db) {
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
 msg("Found", 0+@match, "matches");
+$header =~ s/,/\t/g if $tab;
 print $header, map { "$_\n" } @match if @match > 0;
 
 #-------------------------------------------------------------------
