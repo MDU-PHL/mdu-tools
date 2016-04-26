@@ -92,6 +92,11 @@ $make{all} = {
   DEP => \@id,
 };
 
+$make{csv} = {
+  DEP => \@id,
+  CMD => "mdu-qc-spreadsheet > mdu-wgs.csv",
+};
+
 $make{velvet} = {
   DEP => [ map { "$_/velvet.fa" } @id ],
 };
