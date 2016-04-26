@@ -117,7 +117,7 @@ msg "OVERLAP  : $OVERLAP"
 #............................................................................
 banner "Checking external dependencies"
 
-for EXE in $CORTEX pear ; do
+for EXE in $CORTEX pear seqtk ; do
   WHERE=$(which $EXE)
   if [ "$WHERE" != "" ]; then
     msg "Checking for $EXE - found $WHERE"
@@ -140,7 +140,10 @@ if [ "$OVERLAP" == "1" ]; then
   banner "Overlapping reads"
   pear -v 20 -n "$KMER" -q 10 -u 0 -y "$MEMORY" -j "$THREADS" -f "$R1" -r "$R2" -o olap
   exitOnFailure $? "pear"
-  READSET="-1 olap.assembled.fastq -2 olap.unassembled.forward.fastq:olap.unassembled.reverse.fastq"
+  msg "Reversing PEAR unass-rev reads back to what they should be...."
+  seqtk seq -r olap.unassembled.reverse.fastq > FIXED.olap.unassembled.reverse.fastq
+  exitOnFailure $? "seqtk seq -r"
+  READSET="-1 olap.assembled.fastq -2 olap.unassembled.forward.fastq:FIXED.olap.unassembled.reverse.fastq"
 fi
 
 banner "Building graph"
