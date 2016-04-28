@@ -58,7 +58,7 @@ function usage {
 #...........................................................................
 # Parse the command line options
 
-while getopts 'hk:t:m:k:x:o' opt ; do
+while getopts 'hk:t:m:k:p:o' opt ; do
   case $opt in
     h)
       usage
