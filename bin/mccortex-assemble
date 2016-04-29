@@ -138,7 +138,7 @@ READSET="-2 $R1:$R2"
 
 if [ "$OVERLAP" == "1" ]; then
   banner "Overlapping reads"
-  pear -v 20 -n "$KMER" -q 10 -u 0 -y "$MEMORY" -j "$THREADS" -f "$R1" -r "$R2" -o olap
+  pear -v 20 -n "$KMER" -q 10 -u 0 -y "$MEMORY" -j "$THREADS" -f "$R1" -r "$R2" -o olap 2>&1 | tee -a "$PREFIX.log"
   exitOnFailure $? "pear"
   msg "Reversing PEAR unass-rev reads back to what they should be...."
   seqtk seq -r olap.unassembled.reverse.fastq > FIXED.olap.unassembled.reverse.fastq
