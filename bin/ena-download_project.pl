@@ -9,10 +9,11 @@ use File::Spec;
 use File::Which qw(which);
 use File::Slurp;
 
-#./.aspera/connect/bin/ascp  -QT -l 300m 
-# -i ~/.aspera/connect/etc/asperaweb_id_dsa.openssh 
-# era-fasp@fasp.sra.ebi.ac.uk:/vol1/fastq/ERR111/ERR111871/ERR111871_1.fastq.gz ./
- 
+#my @FIELD = qw(run_accession sample_accession sample_alias study_accession
+#fields=study_accession,secondary_study_accession,sample_accession,secondary_sample_accession,
+#  experiment_accession,run_accession,tax_id,scientific_name,instrument_model,
+#  library_layout,fastq_ftp,fastq_galaxy,submitted_ftp,submitted_galaxy,cram_index_ftp,cram_index_galaxy,sample_alias
+#
 my($aspera) = which('ascp');
 $aspera = qx(dirname `readlink -m '$aspera/..'`);
 chomp $aspera;
@@ -53,6 +54,7 @@ write_file($rt_fn, $content);
 print STDERR "Generating Makefile: $pid/Makefile\n";
 open my $MF, '>', "$pid/Makefile";
 print $MF "# $pid\n# $url\n";
+# http://www.ebi.ac.uk/ena/browse/read-download#downloading_files_aspera
 print $MF "ASCP=$ascp -QT -l 300m -i $askey\n";
 print $MF "all: files\n";
 
@@ -118,8 +120,8 @@ sub setOptions {
     {OPT=>"verbose!",  VAR=>\$verbose, DEFAULT=>0, DESC=>"Verbose output"},
     {OPT=>"aspera=s",  VAR=>\$aspera, DEFAULT=>$aspera, DESC=>"AsperaConnect installation dir"},
     {OPT=>"sampleids!",  VAR=>\$sampleids, DEFAULT=>0, DESC=>"Use Sample IDs for names not Run IDs"},
-    {OPT=>"nose!",  VAR=>\$nose, DEFAULT=>0, DESC=>"Exclude single-end read samples"},
-    {OPT=>"nope!",  VAR=>\$nope, DEFAULT=>0, DESC=>"Exclude paired-end read samples"},
+    {OPT=>"no-se!",  VAR=>\$nose, DEFAULT=>0, DESC=>"Exclude single-end read samples"},
+    {OPT=>"no-pe!",  VAR=>\$nope, DEFAULT=>0, DESC=>"Exclude paired-end read samples"},
   );
 
   (!@ARGV) && (usage());
