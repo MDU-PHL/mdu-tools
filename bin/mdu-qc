@@ -144,7 +144,7 @@ for my $id (@id)
   $make{"$id/species.txt"} = {
     DEP => "$id/kraken.tab",
     CMD => [ 
-      "grep -P \"\tS\t\" $make_dep | sort -k3nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
+      "grep -P \"\tS\t\" $make_dep | sort -k1nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
     ]
   };
 
