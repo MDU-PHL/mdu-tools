@@ -48,7 +48,7 @@ MDU::Logger->quiet($quiet);
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
-  ISOLATE ANALYSIS_DATE SPECIES SCHEME ST READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+  ISOLATE ANALYSIS_DATE SPECIES SCHEME ST SEROTYPE AMR_GENES READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
 my $count=0;
@@ -84,27 +84,34 @@ sub process_id {
   chomp @mlst;
   $row{SCHEME} = $mlst[1];
   $row{ST} = $mlst[2];
+  close MLST;
   
   open YIELD, '<', "$id/yield.tab";
   while (<YIELD>) {
     chomp;
     my @x = split m/\t/;
+#    print STDERR "$id: @x\n";
     $row{ uc($x[0]) } = $x[1];
   }
   delete $row{FILES};
+  close YIELD;
   
+#  my($amr) = qx(cut -f 5 $id/abricate.tab | tail -n +1 | tr "\n" ";");
+  my($amr) = qx(cut -f 5 $id/abricate.tab | tr "\n" ";");
+  $amr =~ s/^GENE;//;  
+  $amr =~ s/;$//;
+  $row{AMR_GENES} = $amr;
+#  chomp @amr;
+#  print STDERR "$id = @amr\n";
+#  $row{AMR_GENES} = scalar(@amr) ? join(';', @amr) : '';
+
   $row{CONTIGS} = qx(grep -c '>' $id/contigs.fa);
   chomp $row{CONTIGS};
   $row{GENOME_SIZE} = -s "$id/contigs.fa"; # approx
   
-  print join(",", map { $row{$_} } @COLS), "\n";
+  print join(",", map { $row{$_} || '' } @COLS), "\n";
 }
 
 #-------------------------------------------------------------------
-
-
-
-#-------------------------------------------------------------------
-
 
 

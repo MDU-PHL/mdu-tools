@@ -113,7 +113,7 @@ for my $id (@id)
 {
 
   $make{$id} = {
-    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab" ],
+    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab" ],
     PHONY => 1,
   };
 
@@ -177,6 +177,13 @@ for my $id (@id)
     DEP => "$id/contigs.fa",
     CMD => [ 
       "mlst $make_dep > $make_target",
+    ]
+  };
+
+  $make{"$id/abricate.tab"} = {
+    DEP => "$id/contigs.fa",
+    CMD => [ 
+      "abricate $make_dep > $make_target",
     ]
   };
 
