@@ -173,6 +173,18 @@ for my $id (@id)
     ]
   };
 
+  my $SDIR = "$id/spades";
+  $make{"$id/spades.fa"} = {
+    DEP => $reads{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "rm -fr '$SDIR'",
+      "spades-fast --cpus $threads --gsize 4.0M --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$SDIR'",
+      "fa-add_new_ids.pl --moveid --format '$id.ctg%05d.spades' '$SDIR/contigs.fasta' > $make_target",
+      "rm -fr '$SDIR'",
+    ]
+  };
+
   $make{"$id/mlst.tab"} = {
     DEP => "$id/contigs.fa",
     CMD => [ 
