@@ -45,6 +45,14 @@ MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
 
+open SERO, '<', "$FindBin::RealBin/../etc/senterica.serotype.map";
+my %sero_of;
+while (<SERO>) {
+  chomp;
+  my($st,$serotype) = split m/\t/;
+  $sero_of{$st} = $serotype;
+}
+
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
@@ -108,6 +116,8 @@ sub process_id {
   $row{CONTIGS} = qx(grep -c '>' $id/contigs.fa);
   chomp $row{CONTIGS};
   $row{GENOME_SIZE} = -s "$id/contigs.fa"; # approx
+
+  $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
   
   print join(",", map { $row{$_} || '' } @COLS), "\n";
 }
