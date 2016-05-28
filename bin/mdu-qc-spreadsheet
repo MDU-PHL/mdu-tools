@@ -56,7 +56,7 @@ while (<SERO>) {
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
-  ISOLATE ANALYSIS_DATE SPECIES SCHEME ST SEROTYPE AMR_GENES READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+  ISOLATE ANALYSIS_DATE SPECIES SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
 my $count=0;
@@ -92,6 +92,10 @@ sub process_id {
   chomp @mlst;
   $row{SCHEME} = $mlst[1];
   $row{ST} = $mlst[2];
+  $row{MLST_ALLELES} = $row{ST} eq '-'
+                     ? ''
+                     : join(';', @mlst[3..$#mlst])
+                     ;
   close MLST;
   
   open YIELD, '<', "$id/yield.tab";
