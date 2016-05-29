@@ -101,6 +101,10 @@ $make{velvet} = {
   DEP => [ map { "$_/velvet.fa" } @id ],
 };
 
+$make{spades} = {
+  DEP => [ map { "$_/spades.fa" } @id ],
+};
+
 if ($batches > 1) {
   for my $b (1 .. $batches) {
     $make{"batch$b"} = { 
