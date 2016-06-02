@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+use Fatal;
 
 #-------------------------------------------------------------------
 # libraries
@@ -56,7 +57,8 @@ while (<SERO>) {
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
-  ISOLATE ANALYSIS_DATE SPECIES SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+  ISOLATE ANALYSIS_DATE SPECIES ASSEMBLER SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES 
+  READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
 my $count=0;
@@ -81,14 +83,16 @@ sub process_id {
 
   my($species) = qx(cat $id/species.txt);
   chomp $species;
-  $row{SPECIES} = $species;
+  $row{SPECIES} = $species or die "$id/species.txt problem";
 
   my($ts) = qx(cat $id/timestamp.txt);
+  $ts or die "$id/timestamp.txt problem";
 #  my $date = ParseDate($ts);
   $row{ANALYSIS_DATE} = UnixDate($ts, "%Y-%m-%d");
   
-  open MLST, '<', "$id/mlst.tab";
+  open MLST, '<', "$id/mlst.tab" or die "$id/mlst.tab $!";
   my @mlst = split m/\t/, scalar(<MLST>);
+  close MLST;
   chomp @mlst;
   $row{SCHEME} = $mlst[1];
   $row{ST} = $mlst[2];
@@ -96,9 +100,8 @@ sub process_id {
                      ? ''
                      : join(';', @mlst[3..$#mlst])
                      ;
-  close MLST;
   
-  open YIELD, '<', "$id/yield.tab";
+  open YIELD, '<', "$id/yield.tab" or die "$id/yield.tab $!";
   while (<YIELD>) {
     chomp;
     my @x = split m/\t/;
@@ -108,6 +111,14 @@ sub process_id {
   delete $row{FILES};
   close YIELD;
   
+  open CONTIGS, '<', "$id/contigs.fa" or die "$id/contigs.fa $!";
+  my $hdr = <CONTIGS>;
+  close CONTIGS;
+  chomp $hdr;
+  $hdr =~ m/^>\S+\.(\S+)/;
+  $row{ASSEMBLER} = $1 || 'unknown';
+
+  -r "$id/abricate.tab" or die "$id/abricate.tab problem";
 #  my($amr) = qx(cut -f 5 $id/abricate.tab | tail -n +1 | tr "\n" ";");
   my($amr) = qx(cut -f 5 $id/abricate.tab | tr "\n" ";");
   $amr =~ s/^GENE;//;  

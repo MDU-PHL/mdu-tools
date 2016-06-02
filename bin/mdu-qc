@@ -22,9 +22,15 @@ my $threads = 8;
 my $kmer    = 31;
 my $batches = 3;
 my $rootdir = $MDU::MDUDIR;
+my $assembler = 'spades';
+
+my %ok_asm = (spades=>1, velvet=>1, megahit=>1);
+
+#-------------------------------------------------------------------
 
 sub usage {
   my $EXE = $FindBin::RealScript;
+  my $asm_opts = join(' ', keys %ok_asm);
   print <<"USAGE";
 Synopsis:
   Generate a Makefile to QC all the MDU isolates
@@ -38,6 +44,7 @@ Options:
   --kmer    K	K-mer size for assembly ($kmer)
   --batches B	Generate batch targets ($batches)
   --rootdir D   Folder where reads are contained ($rootdir)
+  --asm     P   Assembler: $asm_opts ($assembler)
 USAGE
   exit;
 }
@@ -49,6 +56,7 @@ GetOptions(
   "threads=i" => \$threads,
   "rootdir=s" => \$rootdir,
   "kmer=i"    => \$kmer,
+  "asm=s"     => \$assembler,
 ) 
 or usage();
 
@@ -56,6 +64,8 @@ MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
 # main script
+
+exists $ok_asm{$assembler} or err("Invalid assembler '$assembler'");
 
 $MDU::MDUDIR = abs_path( $rootdir ) if $rootdir;
 
@@ -97,13 +107,11 @@ $make{csv} = {
   CMD => "mdu-qc-spreadsheet > mdu-wgs.csv",
 };
 
-$make{velvet} = {
-  DEP => [ map { "$_/velvet.fa" } @id ],
-};
-
-$make{spades} = {
-  DEP => [ map { "$_/spades.fa" } @id ],
-};
+for my $a (keys %ok_asm) {
+  $make{$a} = {
+    DEP => [ map { "$_/$a.fa" } @id ],
+  };
+}
 
 if ($batches > 1) {
   for my $b (1 .. $batches) {
@@ -152,14 +160,19 @@ for my $id (@id)
     ]
   };
 
-  my $MDIR = "$id/megahit";
   $make{"$id/contigs.fa"} = {
+    DEP => "$id/$assembler.fa",
+    CMD => "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' $make_dep > $make_target",
+  };
+
+  my $MDIR = "$id/megahit";
+  $make{"$id/megahit.fa"} = {
     DEP => $reads{$id},
     CMD => [ 
       "mkdir -p '$id'",
       "rm -fr '$MDIR'",
       "megahit --min-count 3 --k-list $kmer -t $threads --memory 0.25 -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --out-dir '$MDIR' --min-contig-len 500",
-      "fa-add_new_ids.pl --moveid --format '$id.ctg%05d.megahit-$kmer' '$MDIR/final.contigs.fa' > $make_target",
+      "cp '$MDIR/final.contigs.fa' $make_target",
       "rm -fr '$MDIR'",
     ]
   };
@@ -171,8 +184,8 @@ for my $id (@id)
       "mkdir -p '$id'",
       "rm -fr '$VDIR'",
       "OMP_NUM_THREADS=$threads velveth '$VDIR' $kmer -create_binary -shortPaired -fastq.gz -separate $make_deps",
-      "OMP_NUM_THREADS=$threads velvetg '$VDIR' -exp_cov auto -cov_cutoff auto -min_contig_lgth 500",
-      "fa-add_new_ids.pl --moveid --format '$id.ctg%05d.velvet-$kmer' '$VDIR/contigs.fa' > $make_target",
+      "OMP_NUM_THREADS=$threads velvetg '$VDIR' -exp_cov auto -cov_cutoff auto -min_contig_lgth 200",
+      "cp '$VDIR/contigs.fa' $make_target",
       "rm -fr '$VDIR'",
     ]
   };
@@ -184,7 +197,7 @@ for my $id (@id)
       "mkdir -p '$id'",
       "rm -fr '$SDIR'",
       "spades-fast --cpus $threads --gsize 4.0M --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$SDIR'",
-      "fa-add_new_ids.pl --moveid --format '$id.ctg%05d.spades' '$SDIR/contigs.fasta' > $make_target",
+      "cp '$SDIR/contigs.fasta' $make_target",
       "rm -fr '$SDIR'",
     ]
   };
