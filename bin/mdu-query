@@ -17,9 +17,9 @@ use List::Util qw(sum);
 # command line
 
 my $verbose = 0;
-my $db_file = $MDU::MDUDIR."/../QC/mdu-wgs.csv";
+my $db_file = $MDU::MDUDIR."/../QC/mdu-wgs.tab";
 my $logical_or = 0;
-my $tab = 0;
+my $csv = 0;
 my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele);
 
 sub usage {
@@ -32,7 +32,7 @@ Usage:
 Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
-  --tab	        Write TSV instead of CSV
+  --csv	        Write CSV instead of TSV/TAB
   --db FILE     CSV of isolate data ($db_file)
   --or          Do logical OR instead of AND
   --species P   Match SPECIES 
@@ -51,7 +51,7 @@ GetOptions(
   "help"      => \&usage,
   "verbose"   => \$verbose,
   "db=s"      => \$db_file,
-  "tab"       => \$tab,
+  "csv"       => \$csv,
   "or"        => \$logical_or,
   "species=s" => \$species,
   "st=s"      => \$seqtype,
@@ -69,20 +69,20 @@ or usage();
 
 my %db;
 msg("Opening database: $db_file");
-open CSV, '<', $db_file;
-my $header = <CSV>;
-my(@hdr) = split m/,/, $header;
+open TSV, '<', $db_file;
+my $header = <TSV>;
+my(@hdr) = split m/\t/, $header;
 chomp @hdr;
-while (my $line = <CSV>) {
+while (my $line = <TSV>) {
   chomp $line;
-  my @x = split m/,/, $line;
+  my @x = split m/\t/, $line;
   for my $i (0 .. $#x) {
     $db { $x[0] } { $hdr[$i] } = $x[$i];
   }
-  $line =~ s/,/\t/g if $tab;
+  $line = tab_to_csv($line) if $csv;
   $db{$x[0]}{LINE} = $line;
 }
-close CSV;
+close TSV;
 msg("Read", scalar(keys %db), "isolates.");
 
 my $pass = sum( map { $_ ? 1 : 0 } ($species, $seqtype, $sero, $scheme, $isolate, $date, $amr, $allele) );
@@ -102,7 +102,14 @@ for my $id (keys %db) {
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
 msg("Found", 0+@match, "matches");
-$header =~ s/,/\t/g if $tab;
+$header = tab_to_csv($header) if $csv;
 print $header, map { "$_\n" } @match if @match > 0;
 
 #-------------------------------------------------------------------
+
+sub tab_to_csv {
+  my($line) = @_;
+  $line =~ s/,/~/g;
+  $line =~ s/\t/,/g;
+  return $line;
+}

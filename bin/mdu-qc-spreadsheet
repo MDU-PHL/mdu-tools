@@ -19,6 +19,8 @@ use MDU::Logger qw(msg err);
 
 my $verbose = 0;
 my $quiet   = 0;
+my $SEP     = "\t";
+my $INSEP   = ";";
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -31,6 +33,7 @@ Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
   --quiet	No screen output ($quiet)
+  --sep CHAR    Separator character ($SEP)
 USAGE
   exit;
 }
@@ -39,6 +42,7 @@ GetOptions(
   "help"      => \&usage,
   "verbose"   => \$verbose,
   "quiet"     => \$quiet,
+  "sep=s"     => \$SEP,
 ) 
 or usage();
 
@@ -66,7 +70,7 @@ opendir(my $dh, '.');
 while ( my $dir = readdir($dh) ) {
   next unless -d $dir and $dir !~ m/^\./;
   if ($count == 0) {
-    print join(",", @COLS),"\n";
+    print join($SEP, @COLS),"\n";
   }
   $count++;
   msg(" #$count $dir");
@@ -119,14 +123,14 @@ sub process_id {
   $row{ASSEMBLER} = $1 || 'unknown';
 
   -r "$id/abricate.tab" or die "$id/abricate.tab problem";
-#  my($amr) = qx(cut -f 5 $id/abricate.tab | tail -n +1 | tr "\n" ";");
-  my($amr) = qx(cut -f 5 $id/abricate.tab | tr "\n" ";");
+#  my($amr) = qx(cut -f 5 $id/abricate.tab | tail -n +1 | tr "\n" "$INSEP");
+  my($amr) = qx(cut -f 5 $id/abricate.tab | tr "\n" "$INSEP");
   $amr =~ s/^GENE;//;  
   $amr =~ s/;$//;
   $row{AMR_GENES} = $amr;
 #  chomp @amr;
 #  print STDERR "$id = @amr\n";
-#  $row{AMR_GENES} = scalar(@amr) ? join(';', @amr) : '';
+#  $row{AMR_GENES} = scalar(@amr) ? join($INSEP, @amr) : '';
 
   $row{CONTIGS} = qx(grep -c '>' $id/contigs.fa);
   chomp $row{CONTIGS};
@@ -134,7 +138,7 @@ sub process_id {
 
   $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
   
-  print join(",", map { $row{$_} || '' } @COLS), "\n";
+  print join($SEP, map { $row{$_} || '' } @COLS), "\n";
 }
 
 #-------------------------------------------------------------------
