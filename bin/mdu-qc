@@ -102,9 +102,12 @@ $make{all} = {
   DEP => \@id,
 };
 
-$make{csv} = {
+$make{ss} = {
   DEP => \@id,
-  CMD => "mdu-qc-spreadsheet > mdu-wgs.csv",
+  CMD => {
+    "mdu-qc-spreadsheet > mdu-wgs.tab",
+    "tsv_to_csv.pl mdu-wgs.tab > mdu-wgs.csv",
+  }
 };
 
 for my $a (keys %ok_asm) {
