@@ -6,7 +6,7 @@ use File::Spec;
 use List::Util qw(min max);
 use Cwd;
 
-my(@Options, $debug, $kmers, $gsize, $R1, $R2, $outdir, $force, $cpus, $correction, $asm, $careful);
+my(@Options, $debug, $kmers, $gsize, $R1, $R2, $outdir, $force, $cpus, $correction, $asm, $careful, $opts);
 setOptions();
 
 # Options
@@ -42,8 +42,7 @@ run_cmd("flash -d . -o flash -z -M 300 -t $cpus R1.cor.fq.gz R2.cor.fq.gz");
 msg("Running SPAdes");
 run_cmd(
   "spades.py -1 flash.notCombined_1.fastq.gz -2 flash.notCombined_2.fastq.gz -s flash.extendedFrags.fastq.gz"
- ." --only-assembler --threads $cpus --memory 32 -o . --tmp-dir /tmp -k $kmers"
- .($careful ? " --careful" : "")
+ ." --only-assembler --threads $cpus --memory 32 -o . --tmp-dir /tmp -k $kmers $opts"
 );
 
 if (0 and $correction) {
@@ -129,7 +128,8 @@ sub setOptions {
     {OPT=>"force!",  VAR=>\$force, DEFAULT=>0, DESC=>"Force overwite of existing"},
     {OPT=>"cpus=i",  VAR=>\$cpus, DEFAULT=>num_cpus(), DESC=>"Number of CPUs to waste"},
     {OPT=>"kmers=s",  VAR=>\$kmers, DEFAULT=>'31,61,91,121', DESC=>"K-mers to use"},
-    {OPT=>"careful!",  VAR=>\$careful, DEFAULT=>0, DESC=>"Use SPAdes careful mode"},
+#    {OPT=>"careful!",  VAR=>\$careful, DEFAULT=>0, DESC=>"Use SPAdes careful mode"},
+    {OPT=>"opts=s",  VAR=>\$opts, DEFAULT=>'', DESC=>"Extra SPAdes options eg. --plasmid --careful ..."},
 #    {OPT=>"correction!",  VAR=>\$correction, DEFAULT=>0, DESC=>"Post-correct assembly errors"},
 #    {OPT=>"asm=s",  VAR=>\$asm, DEFAULT=>'before_rr', DESC=>"Correct either: before_rr contigs scaffolds"},
   );
