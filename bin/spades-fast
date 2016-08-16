@@ -123,7 +123,7 @@ sub setOptions {
     {OPT=>"debug!",  VAR=>\$debug, DEFAULT=>0, DESC=>"Debug info"},
     {OPT=>"R1=s",  VAR=>\$R1, DEFAULT=>'', DESC=>"Read 1 FASTQ"},
     {OPT=>"R2=s",  VAR=>\$R2, DEFAULT=>'', DESC=>"Read 2 FASTQ"},
-    {OPT=>"gsize=s",  VAR=>\$gsize, DEFAULT=>'4.0G', DESC=>"Estimated genome size (for error correction)"},
+    {OPT=>"gsize=s",  VAR=>\$gsize, DEFAULT=>'4.0M', DESC=>"Estimated genome size (for error correction)"},
     {OPT=>"outdir=s",  VAR=>\$outdir, DEFAULT=>'', DESC=>"Output folder"},
     {OPT=>"force!",  VAR=>\$force, DEFAULT=>0, DESC=>"Force overwite of existing"},
     {OPT=>"cpus=i",  VAR=>\$cpus, DEFAULT=>num_cpus(), DESC=>"Number of CPUs to waste"},
