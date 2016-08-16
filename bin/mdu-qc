@@ -96,6 +96,8 @@ my $make_target = '$@';
 my $make_dep = '$<';
 my $make_deps = '$^';
 
+my $kvalues = join( q{,} , map { 31+($_*5) } (0 .. 18) );
+
 my @id = sort keys %reads;
 
 $make{all} = {
@@ -128,6 +130,7 @@ for my $id (@id)
 {
 
   $make{$id} = {
+#    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab", "$id/kmerstream.tab" ],
     DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab" ],
     PHONY => 1,
   };
@@ -145,6 +148,15 @@ for my $id (@id)
     CMD => [ 
       "mkdir -p '$id'",
       "kraken --threads $threads --preload --paired $make_deps | kraken-report > $make_target",
+    ]
+  };
+
+  $make{"$id/kmerstream.tab"} = {
+    DEP => $reads{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "KmerStream --verbose -t $threads -k $kvalues --tsv --online -o /dev/stdout $make_deps ".
+        " | KmerStreamEstimate.py /dev/stdin > $make_target",
     ]
   };
 
