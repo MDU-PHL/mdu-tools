@@ -14,6 +14,12 @@ use MDU;
 use MDU::Logger qw(msg err);
 
 #-------------------------------------------------------------------
+# globals
+
+my $ARIBA_DB = "$FindBin::RealBin/../db/ariba/resfinder";
+my $TMPDIR = $ENV{'TMPDIR'} || '/tmp';
+
+#-------------------------------------------------------------------
 # command line
 
 my $verbose = 0;
@@ -131,7 +137,8 @@ for my $id (@id)
 
   $make{$id} = {
 #    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab", "$id/kmerstream.tab" ],
-    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab" ],
+    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", 
+             "$id/abricate.tab", "$id/ariba.tab" ],
     PHONY => 1,
   };
 
@@ -217,6 +224,18 @@ for my $id (@id)
     ]
   };
 
+  my $ARIBA_DIR = "$id/ariba";
+  $make{"$id/ariba.tab"} = {
+    DEP => $reads{$id},
+    CMD => [ 
+      "mkdir -p '$id'",
+      "rm -fr '$ARIBA_DIR'",
+      "ariba run --tmp_dir $TMPDIR --verbose $ARIBA_DB $make_deps $ARIBA_DIR",
+      "cp '$ARIBA_DIR/report.tsv' $make_target",
+#      "rm -fr '$SDIR'",
+    ]
+  };
+
   $make{"$id/mlst.tab"} = {
     DEP => "$id/contigs.fa",
     CMD => [ 
@@ -241,7 +260,9 @@ $make{blastdb} = {
 };
 
 
+msg("Writing Makefile");
 write_makefile(\%make);
+msg("Done.");
 
 #-------------------------------------------------------------------
 # write makefile
