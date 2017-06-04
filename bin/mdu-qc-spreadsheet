@@ -61,7 +61,7 @@ while (<SERO>) {
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
-  ISOLATE ANALYSIS_DATE SPECIES ASSEMBLER SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES 
+  ISOLATE ANALYSIS_DATE SPECIES 16S_RNA ASSEMBLER SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES 
   READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
@@ -88,6 +88,12 @@ sub process_id {
   my($species) = qx(cat $id/species.txt);
   chomp $species;
   $row{SPECIES} = $species or die "$id/species.txt problem";
+
+  my($sixess) = qx(cat $id/sixess/species.txt);
+  $sixess ||= 'ERROR';
+  chomp $sixess;
+#  $row{'16S_RNA'} = $sixess or die "$id/sixess/species.txt problem";
+  $row{'16S_RNA'} = $sixess || '';
 
   my($ts) = qx(cat $id/timestamp.txt);
   $ts or die "$id/timestamp.txt problem";
