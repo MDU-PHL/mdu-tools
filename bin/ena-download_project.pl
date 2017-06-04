@@ -31,7 +31,7 @@ my $askey = "$aspera/etc/asperaweb_id_dsa.openssh";
 
 print STDERR "Fetching run table for $pid from ENA\n";
 my $url = "http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=${pid}".
-          "&result=read_run&download=txt&fields=run_accession,sample_alias,fastq_ftp";
+          "&result=read_run&download=txt&fields=run_accession,sample_alias,fastq_ftp,submitted_ftp";
 print STDERR "URL: $url\n" if $verbose;
 my $content = get($url);
 $content or die "Could not download $pid run table\n";
@@ -45,7 +45,6 @@ print STDERR "Found $N samples in $pid\n";
 
 print STDERR "Making folder: $pid\n";
 make_path($pid);
-
 
 my $rt_fn = "$pid/$pid.tab";
 print STDERR "Saving run table: $rt_fn\n";
@@ -64,26 +63,31 @@ my $skip_se = 0;
 my $skip_pe = 0;
 my @dep;
 
+# 0              1             2          3
+# run_accession, sample_alias, fastq_ftp, submitted_ftp
+
 for my $row (@row) {
   next if $row =~ m/^run_accession/;
   my @col = split m/\t/, $row;
   my $dir = $sampleids ? $col[1] : $col[0];
-  if (not $col[2]) {
-    print STDERR "WARNING: no FASTQ for @col\n";
+  my $label = join ' / ', $col[0], $col[1];
+  unless ($col[2] or $col[3]) {
+    print STDERR "WARNING: no ENA FASTQ for $label\n";
     next;
   }
-  my @fastq = split m{;}, $col[2];
+  my @fastq = split m{;}, ($col[2] || $col[3]); # fallback to submitter FASTQ
 
   if ($nose and @fastq==1) {
-    print STDERR "NOTICE: skipping single-end sample @col\n";
+    print STDERR "NOTICE: skipping single-end sample $label\n";
     $skip_se++;
     next;
   }
   if ($nope and @fastq==2) {
-    print STDERR "NOTICE: skipping paired-end sample @col\n";
+    print STDERR "NOTICE: skipping paired-end sample $label\n";
     $skip_pe++;
     next;
   }
+  print STDERR "Adding sample: $label\n";
 #  print "mkdir '$pid/$dir'\n";
   $err++;
   for my $fastq (@fastq) {
@@ -102,7 +106,7 @@ for my $row (@row) {
 print $MF "files: @dep\n";
 print STDERR "Skipped $skip_pe paired-end read samples\n" if $nope;
 print STDERR "Skipped $skip_se single-end read samples\n" if $nose;
-print STDERR "Prpared $err runs with total of $fq FASTQ files for download.\n";
+print STDERR "Prepared $err runs with total of $fq FASTQ files for download.\n";
 print STDERR "Type 'make -C $pid' to commence downloading!\n";
 
 #./.aspera/connect/bin/ascp  -QT -l 300m
