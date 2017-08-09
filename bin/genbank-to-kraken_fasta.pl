@@ -18,6 +18,7 @@ for my $gbk (@ARGV) {
   while (<IN>) {
     if (m/^LOCUS\s+(\S+)/) {
       $id = $1;
+#      print STDERR "Converting: $_";
     }
     elsif (m/taxon:(\d+)/) {
       $taxid = $1;
