@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 use strict;
 use warnings;
 use LWP::Simple;
@@ -54,7 +54,7 @@ print STDERR "Generating Makefile: $pid/Makefile\n";
 open my $MF, '>', "$pid/Makefile";
 print $MF "# $pid\n# $url\n";
 # http://www.ebi.ac.uk/ena/browse/read-download#downloading_files_aspera
-print $MF "ASCP=$ascp -QT -l 300m -i $askey\n";
+print $MF "ASCP=$ascp -P33001 -QT -l 300m -i $askey\n";
 print $MF "all: files\n";
 
 my $err = 0;
