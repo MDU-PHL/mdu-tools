@@ -20,7 +20,7 @@ my $verbose = 0;
 my $db_file = $MDU::MDUDIR."/../QC/mdu-wgs.tab";
 my $logical_or = 0;
 my $csv = 0;
-my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele);
+my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele, $asm);
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -43,6 +43,7 @@ Options:
   --date    P   Match ANALYSIS_DATE
   --amr     G   Match AMR_GENES
   --sero    G   Match SEROTYPE
+  --asm     A   Match ASSEMBLER
 USAGE
   exit;
 }
@@ -61,6 +62,7 @@ GetOptions(
   "amr=s"     => \$amr,
   "sero=s"    => \$sero,
   "allele=s"  => \$allele,
+  "asm=s"     => \$asm,
 ) 
 or usage();
 
@@ -85,7 +87,7 @@ while (my $line = <TSV>) {
 close TSV;
 msg("Read", scalar(keys %db), "isolates.");
 
-my $pass = sum( map { $_ ? 1 : 0 } ($species, $seqtype, $sero, $scheme, $isolate, $date, $amr, $allele) );
+my $pass = sum( map { $_ ? 1 : 0 } ($species, $seqtype, $sero, $scheme, $isolate, $date, $amr, $allele, $asm) );
 $pass = 1 if $logical_or and $pass >= 1;
 $pass ||= 1E9;
 my @match;
@@ -99,6 +101,7 @@ for my $id (keys %db) {
   $score++ if $date    and $db{$id}{ANALYSIS_DATE} =~ m/$date/;
   $score++ if $amr     and $db{$id}{AMR_GENES}     =~ m/$amr/i;
   $score++ if $sero    and $db{$id}{SEROTYPE}      =~ m/$sero/i;
+  $score++ if $asm     and $db{$id}{ASSEMBLER}     =~ m/$asm/i;
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
 msg("Found", 0+@match, "matches");

@@ -28,7 +28,7 @@ sub usage {
 Synopsis:
   Generate a spreadsheet from an MDU QC folder structure
 Usage: 
-  $EXE [options] > Makefile
+  $EXE [options] > mdu_wgs.tab
 Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
@@ -61,7 +61,7 @@ while (<SERO>) {
 #my $dm = Date::Manip::Date->new;
 
 my @COLS = qw(
-  ISOLATE ANALYSIS_DATE SPECIES 16S_RNA ASSEMBLER SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES 
+  ISOLATE SPECIES 16S_RNA ASSEMBLER SCHEME ST SEROTYPE MLST_ALLELES AMR_GENES 
   READS YIELD GENOME_SIZE CONTIGS AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
@@ -85,20 +85,22 @@ sub process_id {
   my %row;
   $row{ISOLATE} = $id;
 
-  my($species) = qx(cat $id/species.txt);
+#  my($species) = qx(cat $id/species.txt);
+  my($species) = qx(grep -P "\tS\t" $id/kraken.tab | sort -k1nr | head -n 1 | cut -f 6 | sed 's/^ *//');
   chomp $species;
   $row{SPECIES} = $species or die "$id/species.txt problem";
 
-  my($sixess) = qx(cat $id/sixess/species.txt);
-  $sixess ||= 'ERROR';
-  chomp $sixess;
-#  $row{'16S_RNA'} = $sixess or die "$id/sixess/species.txt problem";
-  $row{'16S_RNA'} = $sixess || '';
+#  my($sixess) = qx(cat $id/sixess/species.txt);
+#  $sixess ||= 'ERROR';
+#  chomp $sixess;
+##  $row{'16S_RNA'} = $sixess or die "$id/sixess/species.txt problem";
+#  $row{'16S_RNA'} = $sixess || '';
+  $row{'16S_RNA'} = '';
 
-  my($ts) = qx(cat $id/timestamp.txt);
-  $ts or die "$id/timestamp.txt problem";
+#  my($ts) = qx(cat $id/timestamp.txt);
+#  $ts or die "$id/timestamp.txt problem";
 #  my $date = ParseDate($ts);
-  $row{ANALYSIS_DATE} = UnixDate($ts, "%Y-%m-%d");
+#  $row{ANALYSIS_DATE} = UnixDate($ts, "%Y-%m-%d");
   
   open MLST, '<', "$id/mlst.tab" or die "$id/mlst.tab $!";
   my @mlst = split m/\t/, scalar(<MLST>);
@@ -145,6 +147,7 @@ sub process_id {
   $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
   
   print join($SEP, map { $row{$_} || '' } @COLS), "\n";
+#  return \%row;
 }
 
 #-------------------------------------------------------------------

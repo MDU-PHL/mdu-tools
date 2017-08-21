@@ -16,7 +16,7 @@ use MDU::Logger qw(msg err);
 #-------------------------------------------------------------------
 # globals
 
-my $ARIBA_DB = "$FindBin::RealBin/../db/ariba/resfinder";
+#my $ARIBA_DB = "$FindBin::RealBin/../db/ariba/resfinder";
 my $TMPDIR = $ENV{'TMPDIR'} || '/tmp';
 
 #-------------------------------------------------------------------
@@ -26,12 +26,12 @@ my $verbose = 0;
 my $quiet   = 0;
 my $threads = 8;
 my $kmer    = 31;
-my $batches = 3;
+#my $batches = 3;
 my $rootdir = $MDU::MDUDIR;
-my $assembler = 'spades';
+my $assembler = 'shovill';   # do not change
 my $scheme = 'auto';
-
-my %ok_asm = (spades=>1, velvet=>1, megahit=>1, shovill=>1);
+my $tempdir = $ENV{TMPDIR} || '/tmp';
+my %ok_asm = (spades=>0, velvet=>0, megahit=>0, shovill=>1);
 
 #-------------------------------------------------------------------
 
@@ -49,10 +49,10 @@ Options:
   --quiet	No screen output ($quiet)
   --threads N	Threads per process ($threads)
   --kmer    K	K-mer size for assembly ($kmer)
-  --batches B	Generate batch targets ($batches)
   --rootdir D   Folder where reads are contained ($rootdir)
   --asm     P   Assembler: $asm_opts ($assembler)
   --scheme  S   MLST scheme ($scheme)
+  --tempdir D   Temporary working dir ($tempdir)
 USAGE
   exit;
 }
@@ -64,7 +64,7 @@ GetOptions(
   "threads=i" => \$threads,
   "rootdir=s" => \$rootdir,
   "kmer=i"    => \$kmer,
-  "asm=s"     => \$assembler,
+#  "asm=s"     => \$assembler,
   "scheme=s"  => \$scheme,
 ) 
 or usage();
@@ -104,6 +104,7 @@ my %make;
 my $make_target = '$@';
 my $make_dep = '$<';
 my $make_deps = '$^';
+my $TEMPDIR = '$(TEMPDIR)';
 
 my $kvalues = join( q{,} , map { 31+($_*5) } (0 .. 18) );
 my $mlst_opt = (!$scheme or $scheme eq 'auto') ? "" : "--scheme $scheme";
@@ -112,46 +113,47 @@ my @id = sort keys %reads;
 
 $make{all} = {
   DEP => \@id,
-};
-
-$make{ss} = {
-  DEP => \@id,
   CMD => [
     "mdu-qc-spreadsheet > mdu-wgs.tab",
     "tsv_to_csv.pl mdu-wgs.tab > mdu-wgs.csv",
   ],
 };
 
-for my $a (keys %ok_asm) {
-  $make{$a} = {
-    DEP => [ map { "$_/$a.fa" } @id ],
-  };
-}
+$make{ss} = {
+  CMD => [
+    "mdu-qc-spreadsheet > mdu-wgs.tab",
+    "tsv_to_csv.pl mdu-wgs.tab > mdu-wgs.csv",
+  ],
+};
 
-if ($batches > 1) {
-  for my $b (1 .. $batches) {
-    $make{"batch$b"} = { 
-      DEP => \@id, # FIXME
-    };
-  }
-}
+$make{clean} = {
+  CMD => [
+    'find . -type f -size 0 -delete -print',
+    'find . -type d -name assembler -exec rm -frv {} \;',
+  ],
+};
+
+#for my $a (keys %ok_asm) {
+#  $make{$a} = {
+#    DEP => [ map { "$_/$a.fa" } @id ],
+#  };
+#}
+
+#if ($batches > 1) {
+#  for my $b (1 .. $batches) {
+#    $make{"batch$b"} = { 
+#      DEP => \@id, # FIXME
+#    };
+#  }
+#}
 
 for my $id (@id) 
 {
 
   $make{$id} = {
 #    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab", "$id/kmerstream.tab" ],
-    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", 
-             "$id/abricate.tab", "$id/ariba.tab", "$id/sixess/species.txt" ],
+    DEP => [ "$id/yield.tab", "$id/kraken.tab", "$id/mlst.tab", "$id/abricate.tab" ],
     PHONY => 1,
-  };
-
-  $make{"$id/timestamp.txt"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "date -R > $make_target",
-    ]
   };
 
   $make{"$id/kraken.tab"} = {
@@ -159,23 +161,6 @@ for my $id (@id)
     CMD => [ 
       "mkdir -p '$id'",
       "kraken --threads $threads --preload --paired $make_deps | kraken-report > $make_target",
-    ]
-  };
-
-  $make{"$id/sixess/species.txt"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id/sixess'",
-      "/home/tseemann/git/sixess/bin/sixess -f -t $threads '$id/sixess' $make_dep",
-    ]
-  };
-
-  $make{"$id/kmerstream.tab"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "KmerStream --verbose -t $threads -k $kvalues --tsv --online -o /dev/stdout $make_deps ".
-        " | KmerStreamEstimate.py /dev/stdin > $make_target",
     ]
   };
 
@@ -187,77 +172,55 @@ for my $id (@id)
     ]
   };
 
-  $make{"$id/species.txt"} = {
-    DEP => "$id/kraken.tab",
-    CMD => [ 
-      "grep -P \"\tS\t\" $make_dep | sort -k1nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
-    ]
-  };
+#  $make{"$id/contigs.fa"} = {
+#    DEP => "$id/$assembler.fa",
+#    CMD => [
+#      "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' $make_dep > $make_target",
+#      "rm -f $make_dep",
+#    ],
+#  };
 
+  my $ADIR = "$id/assembler";
+
+#  my $CMDS;
+#  if ($assembler eq 'megahit') {
+#    $CMDS = [ 
+#      "megahit --tmp-dir $TEMPDIR --min-count 3 --k-list $kmer -t $threads --memory 0.25 -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --out-dir '$ADIR' --min-contig-len 500",
+#      "cp '$ADIR/final.contigs.fa' $make_target",
+#    ];
+#  }
+#  elsif ($assembler eq 'spades') {
+#    $CMDS = [
+#      "spades.py --cpus $threads -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --outdir '$ADIR' --tmpdir $TEMPDIR",
+#      "cp '$ADIR/contigs.fasta' $make_target",
+#    ];
+#  }
+#  elsif ($assembler eq 'velvet') {
+#    $CMDS = [
+#      "OMP_NUM_THREADS=$threads velveth '$ADIR' $kmer -create_binary -shortPaired -fastq.gz -separate $make_deps",
+#      "OMP_NUM_THREADS=$threads velvetg '$ADIR' -exp_cov auto -cov_cutoff auto -min_contig_lgth 200",
+#      "cp '$ADIR/contigs.fa' $make_target",
+#    ];
+#  }
+#  elsif ($assembler eq 'shovill') {
+#    $CMDS = [
+#      "shovill --cpus $threads --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$ADIR' --force",
+#      "cp '$ADIR/contigs.fa' $make_target",
+#    ];
+#  }
+#  else {
+#    err("Do not know assembler '$assembler'");
+#  }
+  
   $make{"$id/contigs.fa"} = {
-    DEP => "$id/$assembler.fa",
-    CMD => "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' $make_dep > $make_target",
-  };
-
-  my $MDIR = "$id/megahit";
-  $make{"$id/megahit.fa"} = {
     DEP => $reads{$id},
-    CMD => [ 
+    CMD => [
       "mkdir -p '$id'",
-      "rm -fr '$MDIR'",
-      "megahit --min-count 3 --k-list $kmer -t $threads --memory 0.25 -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --out-dir '$MDIR' --min-contig-len 500",
-      "cp '$MDIR/final.contigs.fa' $make_target",
-      "rm -fr '$MDIR'",
-    ]
-  };
-
-  my $VDIR = "$id/velvet";
-  $make{"$id/velvet.fa"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "rm -fr '$VDIR'",
-      "OMP_NUM_THREADS=$threads velveth '$VDIR' $kmer -create_binary -shortPaired -fastq.gz -separate $make_deps",
-      "OMP_NUM_THREADS=$threads velvetg '$VDIR' -exp_cov auto -cov_cutoff auto -min_contig_lgth 200",
-      "cp '$VDIR/contigs.fa' $make_target",
-      "rm -fr '$VDIR'",
-    ]
-  };
-
-  my $SDIR = "$id/spades";
-  $make{"$id/spades.fa"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "rm -fr '$SDIR'",
-      "spades-fast --cpus $threads --gsize 4.0M --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$SDIR'",
-      "cp '$SDIR/contigs.fasta' $make_target",
-      "rm -fr '$SDIR'",
-    ]
-  };
-
-  my $SHDIR = "$id/shovill";
-  $make{"$id/shovill.fa"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "rm -fr '$SHDIR'",
-      "shovill --cpus $threads --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$SHDIR' --force",
-      "cp '$SHDIR/contigs.fa' $make_target",
-#      "rm -fr '$SHDIR'",
-    ]
-  };
-
-  my $ARIBA_DIR = "$id/ariba";
-  $make{"$id/ariba.tab"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "rm -fr '$ARIBA_DIR'",
-      "ariba run --tmp_dir $TMPDIR --verbose $ARIBA_DB $make_deps $ARIBA_DIR",
-      "cp '$ARIBA_DIR/report.tsv' $make_target",
-#      "rm -fr '$SDIR'",
-    ]
+      "rm -fr '$ADIR'",
+      "shovill --cpus $threads --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$ADIR'",
+      "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' '$ADIR/contigs.fa' > $make_target",
+      "rm -fr '$ADIR'",
+    ],
   };
 
   $make{"$id/mlst.tab"} = {
@@ -273,6 +236,49 @@ for my $id (@id)
       "abricate $make_dep > $make_target",
     ]
   };
+
+#  my $ARIBA_DIR = "$id/ariba";
+#  $make{"$id/ariba.tab"} = {
+#    DEP => $reads{$id},
+#    CMD => [ 
+#      "mkdir -p '$id'",
+#      "rm -fr '$ARIBA_DIR'",
+#      "ariba run --tmp_dir $TMPDIR --verbose $ARIBA_DB $make_deps $ARIBA_DIR",
+#      "cp '$ARIBA_DIR/report.tsv' $make_target",
+##      "rm -fr '$SDIR'",
+#    ]
+#  };
+#
+#  $make{"$id/sixess/species.txt"} = {
+#    DEP => $reads{$id},
+#    CMD => [ 
+#      "mkdir -p '$id/sixess'",
+#      "/home/tseemann/git/sixess/bin/sixess -f -t $threads '$id/sixess' $make_dep",
+#    ]
+#  };
+
+#  $make{"$id/kmerstream.tab"} = {
+#    DEP => $reads{$id},
+#    CMD => [ 
+#      "mkdir -p '$id'",
+#      "KmerStream --verbose -t $threads -k $kvalues --tsv --online -o /dev/stdout $make_deps ".
+#        " | KmerStreamEstimate.py /dev/stdin > $make_target",
+#    ]
+#  };
+
+#  $make{"$id/timestamp.txt"} = {
+#    DEP => $reads{$id},
+#    CMD => [ 
+#      "mkdir -p '$id'",
+#      "date -R > $make_target",
+#    ]
+#  };
+#  $make{"$id/species.txt"} = {
+#    DEP => "$id/kraken.tab",
+#    CMD => [ 
+#      "grep -P \"\tS\t\" $make_dep | sort -k1nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
+#    ]
+#  };
 
 }
 
@@ -299,6 +305,7 @@ sub write_makefile {
   print $fh "MAKEFLAGS += --no-builtin-rules\n";
   print $fh "MAKEFLAGS += --no-builtin-variables\n";
   print $fh ".SUFFIXES:\n";
+  print $fh "TEMPDIR := $tempdir\n";
 
   for my $target ('all', sort grep { $_ ne 'all' } keys %$make) {
     print $fh "\n";
@@ -314,3 +321,4 @@ sub write_makefile {
     }
   }
 }
+
