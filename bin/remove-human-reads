@@ -1,7 +1,7 @@
 #!/bin/bash
 #set -e
 
-VERSION="0.2"
+VERSION="0.3"
 EXE=$(basename $0)
 
 # can use pigz if your disk i/o is awesome
@@ -95,7 +95,7 @@ banner "Checking command line parameters"
 #............................................................................
 banner "Checking external dependencies"
 
-for EXE in seqtk kraken $COMPRESSOR tee ; do
+for EXE in seqtk kraken $COMPRESSOR tee date ; do
   WHERE=$(which $EXE)
   if [ "$WHERE" != "" ]; then
     msg "Checking for $EXE - found $WHERE"
@@ -123,6 +123,8 @@ msg "Output:\n- $OUT1\n- $OUT2"
 #............................................................................
 banner "Removing human reads"
 
+date
+
 seqtk mergepe "$R1" "$R2" \
   | seqtk seq -N \
   | seqtk trimfq - \
@@ -133,6 +135,8 @@ seqtk mergepe "$R1" "$R2" \
   | seqtk seq -2 | $COMPRESSOR > "$OUT2"
 
 exitOnFailure $? "filtering"
+
+date
 
 #............................................................................
 banner "Finished"
