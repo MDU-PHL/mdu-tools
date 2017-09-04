@@ -1,13 +1,13 @@
 #!/bin/bash
 #set -e
 
-VERSION="0.1"
+VERSION="0.2"
 EXE=$(basename $0)
 
-# can use gzip if pigz not installed
-COMPRESSOR="pigz"
+# can use pigz if your disk i/o is awesome
+COMPRESSOR="gzip"
 
-THREADS=8
+THREADS=1
 KDB="/home/linuxbrew/db/kraken/human"
 PREFIX=""
 R1=""
@@ -42,17 +42,18 @@ function version {
 }
 
 function usage {
-  msg "Name:\n  $EXE $VERSION - remove human reads from Illumina PE reads"
-  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
-  msg "Usage:\n  $EXE [options] -p out_prefix -1 R1.fq[.gz] -2 R2.fq[.gz]"
-  msg "Options:"
+  msg "NAME\n  $EXE $VERSION"
+  msg "SYNOPSIS\n  Remove human reads from Illumina paired reads"
+  msg "AUTHOR\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "USAGE\n  $EXE [options] -p out_prefix -1 R1.fq[.gz] -2 R2.fq[.gz]"
+  msg "OPTIONS"
   msg "  -h          Show this help"
   msg "  -v          Print version and exit"
-  msg "  -t          Threads ($THREADS)"
-  msg "  -k          Kraken human database to use ($KDB)"
-  msg "  -p          Output prefix - will write prefix_R{1,2}.fq.gz"
-  msg "  -1          Paired FASTQ Read 1"
-  msg "  -2          Paired FASTQ Read 2"
+  msg "  -t N        Threads ($THREADS)"
+  msg "  -k DIR      Kraken human database to use ($KDB)"
+  msg "  -p PREFIX   Output prefix - will write prefix_R{1,2}.fq.gz"
+  msg "  -1 FASTQ    Paired FASTQ Read 1"
+  msg "  -2 FASTQ    Paired FASTQ Read 2"
   exit 1 
 }
 
@@ -104,7 +105,7 @@ for EXE in seqtk kraken $COMPRESSOR tee ; do
 done
 
 #............................................................................
-banner "Preparing command line"[B
+banner "Preparing to run filtering"
 
 if [ "$COMPRESSOR" = "pigz" ]; then
   COMPRESSOR="$COMPRESSOR -p $THREADS"
@@ -125,14 +126,15 @@ banner "Removing human reads"
 seqtk mergepe "$R1" "$R2" \
   | seqtk seq -N \
   | seqtk trimfq - \
-  | kraken --fastq-input --threads $THREADS --quick --db $KDB \
+  | kraken --preload --fastq-input --threads $THREADS --quick --db $KDB \
     --output /dev/null --unclassified-out /dev/stdout /dev/stdin \
   | seqtk dropse \
   | tee >(seqtk seq -1 | $COMPRESSOR > "$OUT1") \
   | seqtk seq -2 | $COMPRESSOR > "$OUT2"
 
+exitOnFailure $? "filtering"
+
 #............................................................................
 banner "Finished"
 ls -1s "$R1" "$R2" 
 ls -1s "$OUT1" "$OUT2"
-
