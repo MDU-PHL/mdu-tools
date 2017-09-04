@@ -1,0 +1,138 @@
+#!/bin/bash
+#set -e
+
+VERSION="0.1"
+EXE=$(basename $0)
+
+# can use gzip if pigz not installed
+COMPRESSOR="pigz"
+
+THREADS=8
+KDB="/home/linuxbrew/db/kraken/human"
+PREFIX=""
+R1=""
+R2=""
+
+#............................................................................
+# Reusable functions
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function version {
+  msg "$EXE $VERSION"
+  exit 0
+}
+
+function usage {
+  msg "Name:\n  $EXE $VERSION - remove human reads from Illumina PE reads"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] -p out_prefix -1 R1.fq[.gz] -2 R2.fq[.gz]"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -v          Print version and exit"
+  msg "  -t          Threads ($THREADS)"
+  msg "  -k          Kraken human database to use ($KDB)"
+  msg "  -p          Output prefix - will write prefix_R{1,2}.fq.gz"
+  msg "  -1          Paired FASTQ Read 1"
+  msg "  -2          Paired FASTQ Read 2"
+  exit 1 
+}
+
+#...........................................................................
+# Parse the command line options
+
+while getopts 'hvp:t:k:1:2:' opt ; do
+  case $opt in
+    h) usage ;;
+    v) version ;;
+    p) PREFIX=$OPTARG ;;    
+    1) R1=$OPTARG ;;    
+    2) R2=$OPTARG ;;    
+    t) THREADS=$OPTARG ;;
+    k) KRAKENDB=$OPTARG ;;
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 0 ]; then
+  usage
+fi
+
+#............................................................................
+banner "Checking command line parameters"
+
+[ ! "$PREFIX" ] && err "Please provide an output file prefix with -p"
+[ ! "$R1" ] && err "PLease provide a R1 FASTQ with -1"
+[ ! "$R2" ] && err "PLease provide a R2 FASTQ with -2"
+
+[ ! -r "$KDB/database.kdb" ] && err "Can't see '$KDB' kraken database"
+[ ! -r "$R1" ] && err "Can not read R1: $R1"
+[ ! -r "$R2" ] && err "Can not read R1: $R2"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in seqtk kraken $COMPRESSOR tee ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Preparing command line"[B
+
+if [ "$COMPRESSOR" = "pigz" ]; then
+  COMPRESSOR="$COMPRESSOR -p $THREADS"
+fi
+
+OUT1="${PREFIX}_R1.fq.gz"
+OUT2="${PREFIX}_R2.fq.gz"
+
+msg "Using $THREADS threads."
+msg "Using Kraken database: $KDB"
+msg "Output compressed using: $COMPRESSOR"
+msg "Input:\n- $R1\n- $R2"
+msg "Output:\n- $OUT1\n- $OUT2"
+
+#............................................................................
+banner "Removing human reads"
+
+seqtk mergepe "$R1" "$R2" \
+  | seqtk seq -N \
+  | seqtk trimfq - \
+  | kraken --fastq-input --threads $THREADS --quick --db $KDB \
+    --output /dev/null --unclassified-out /dev/stdout /dev/stdin \
+  | seqtk dropse \
+  | tee >(seqtk seq -1 | $COMPRESSOR > "$OUT1") \
+  | seqtk seq -2 | $COMPRESSOR > "$OUT2"
+
+#............................................................................
+banner "Finished"
+ls -1s "$R1" "$R2" 
+ls -1s "$OUT1" "$OUT2"
+
