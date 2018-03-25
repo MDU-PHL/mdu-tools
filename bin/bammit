@@ -1,0 +1,142 @@
+#!/bin/bash
+
+#set -e
+
+CPUS="36"
+RAM="8G"
+EXE=$(basename $0)
+FORCE=0
+
+#............................................................................
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  echo -e "$HBAR\n$*\n$HBAR" 1>&2
+}
+
+function msg {
+  echo -e "$*" 1>&2
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function usage {
+  msg "Name:\n  $EXE - make a BAM file from REF + R1 + R2"
+  msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
+  msg "Usage:\n  $EXE [options] <outprefix> <ref.fasta> <R1.fq.gz> [R2.fq.gz]"
+  msg "Parameters:"
+  msg "  <outname>   Write BAM results to outname.bam[.bai]"
+  msg "  <ref.fasta> FASTA reference genome"
+  msg "  <R1.fq.gz>  FASTQ with read 1, optionally .gz compressed"
+  msg "  <R2.fq.gz>  FASTQ with read 2, optionally .gz compressed (optional)"
+  msg "Options:"
+  msg "  -h          Show this help"
+  msg "  -f          Allow overwriting of existing <outname.bam>"
+  msg "  -t N        CPUS for aligner and samtools (default=$CPUS)"
+  msg "  -m N        Memory for samtools (default=$RAM)"
+  exit 1 
+}
+
+#...........................................................................
+
+while getopts 'hft:' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    f)
+      FORCE=1
+      ;;    
+    t)
+      CPUS=$OPTARG
+      [[ $CPUS =~ ^[1-9][0-9]*$ ]] || err "-t must be an integer > 0, not '$CPUS'"
+      ;;
+    m)
+      RAM=$OPTARG
+      ;;    
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+
+if [ $# -lt 3 ]; then
+  usage
+fi
+
+#............................................................................
+banner "Checking command line parameters"
+
+OUTNAME="$(readlink -f "$1.bam")"
+[ -f "$OUTNAME" -a "$FORCE" -eq "0" ] && err "Output file already exists: $OUTNAME"
+
+REF="$(readlink -f "$2")"
+[ ! -r "$REF" ] && err "Can not read reference file: $REF"
+
+R1="$(readlink -f "$3")" 
+[ ! -r "$R1" ] && err "Can not access R1 read file: $R1"
+
+if [ "$4" == "" ]; then
+  R2=""
+else 
+  R2="$(readlink -f "$4")"
+  [ ! -r "$R2" ] && err "Can not access R2 read file: $R2"
+fi
+
+msg "Reference genome: $REF"
+msg "R1: $R1"
+msg "R2: $R2"
+msg "Will use $CPUS CPU threads and $RAM RAM"
+msg "Output folder: $OUTDIR"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in minimap2 samtools ; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Aligning reads"
+
+minimap2 -a -x sr -t "$CPUS" -R "@RG\\tID:$OUTNAME\\tSM:$OUTNAME" "$REF" "$R1" "$R2" \
+  | samtools sort -n -m "$RAM" -@ "$CPUS" \
+  | samtools fixmate -m - - \
+  | samtools sort -m "$RAM" -@ "$CPUS" \
+  | samtools markdup -r -s - - \
+  > "$OUTNAME"
+
+exitOnFailure $? "b / samtools"
+
+#............................................................................
+banner "Indexing BAM file"
+
+samtools index "$OUTNAME"
+
+#............................................................................
+
+#............................................................................
+banner "Summarising results"
+
+samtools flagstat "$OUTNAME"
+
+#............................................................................
+banner "Finished"
+ls -ls "$OUTNAME.*"
+
