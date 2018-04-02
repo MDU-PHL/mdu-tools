@@ -2,10 +2,11 @@
 
 #set -e
 
-CPUS="36"
-RAM="8G"
+CPUS="16"
+RAM="1G"
 EXE=$(basename $0)
 FORCE=0
+TDIR=${TMPDIR:-/tmp}
 
 #............................................................................
 
@@ -42,13 +43,14 @@ function usage {
   msg "  -h          Show this help"
   msg "  -f          Allow overwriting of existing <outname.bam>"
   msg "  -t N        CPUS for aligner and samtools (default=$CPUS)"
-  msg "  -m N        Memory for samtools (default=$RAM)"
+  msg "  -m N        Memory for samtools PER CPU (default=$RAM)"
+  msg "  -d TEMPDIR  Fast disk for temporary files (default=$TDIR)"
   exit 1 
 }
 
 #...........................................................................
 
-while getopts 'hft:' opt ; do
+while getopts 'hft:m:d:' opt ; do
   case $opt in
     h)
       usage
@@ -59,6 +61,10 @@ while getopts 'hft:' opt ; do
     t)
       CPUS=$OPTARG
       [[ $CPUS =~ ^[1-9][0-9]*$ ]] || err "-t must be an integer > 0, not '$CPUS'"
+      ;;
+    d)
+      TDIR=$OPTARG
+      [[ -d $TDIR ]] || err "-d '$TDIR' folder does not exist."
       ;;
     m)
       RAM=$OPTARG
@@ -116,10 +122,10 @@ done
 banner "Aligning reads"
 
 minimap2 -a -x sr -t "$CPUS" -R "@RG\\tID:$OUTNAME\\tSM:$OUTNAME" "$REF" "$R1" "$R2" \
-  | samtools sort -n -m "$RAM" -@ "$CPUS" \
+  | samtools sort -n -m "$RAM" -@ "$CPUS" -T "$TDIR" \
   | samtools fixmate -m - - \
-  | samtools sort -m "$RAM" -@ "$CPUS" \
-  | samtools markdup -r -s - - \
+  | samtools sort -m "$RAM" -@ "$CPUS" -T "$TDIR" \
+  | samtools markdup -T "$TDIR" -r -s - - \
   > "$OUTNAME"
 
 exitOnFailure $? "b / samtools"
@@ -127,7 +133,7 @@ exitOnFailure $? "b / samtools"
 #............................................................................
 banner "Indexing BAM file"
 
-samtools index "$OUTNAME"
+samtools index "$OUTNAME" "$OUTNAME.bai"
 
 #............................................................................
 
