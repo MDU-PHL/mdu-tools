@@ -10,8 +10,8 @@ use LWP::Simple;
 #
 #   make list   # see versions
 #
-#   make              # download all one by one
-#   make ARCH=Darwin  # download all one by one
+#   make              # download all one by one, for Linux
+#   make ARCH=Darwin  # download all one by one, for MacOS
 #   make -j           # download all in parallel
 #   make 3.8.1        # download a specific version
 #
