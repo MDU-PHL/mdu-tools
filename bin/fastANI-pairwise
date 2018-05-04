@@ -1,0 +1,170 @@
+#!/bin/bash
+
+#............................................................................
+# Defensive bash programming
+
+# https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
+# FIXME: -o pipefail returns 141 in the ACC=$(...) subshell
+set -eu
+
+# trap ctrl-c and call cleanup() to remove tempdir
+trap cleanup INT
+
+#............................................................................
+# Globals
+
+VERSION="0.1"
+EXE=$(basename $0)
+BINDIR=$(dirname $(readlink -f $0))
+THREADS=0
+QUIET=""
+TDIR=""
+OUTFILE="/dev/stdout"
+LOGFILE="/dev/stderr"
+
+#............................................................................
+# Reusable functions
+
+function cleanup {
+  if [ -d "$TDIR" ]; then
+    banner "Removing temp folder: $TDIR"
+    rm -frv "$TDIR"
+  fi  
+}
+
+function msg {
+  if [ -z "$QUIET" ]; then
+    echo -e "$*" 1>&2
+  fi
+}
+
+function err {
+  echo "ERROR: $*" 1>&2
+  exit 1
+}
+
+function exitOnFailure {
+  if [ $1 -ne 0 ]; then
+    err "$2 failed to run (errorcode=$1)"
+  fi
+}
+
+function banner {
+  HBAR="--------------------------------------------------------------------"
+  msg "$HBAR\n$*\n$HBAR"
+}
+
+function usage {
+  QUIET=""
+  msg "SYNOPSIS\n  $EXE $VERSION - run FastANI all-pairwise with >1 thread"
+  msg "USAGE"
+  msg "  $EXE [options] fofn.txt"
+  msg "OPTIONS"
+  msg "  -h        Show this help"
+  msg "  -q        Quiet mode, no message output"
+  msg "  -o FILE   Output file ($OUTFILE)"
+  msg "  -l FILE   Log file ($LOGFILE)"
+  msg "  -t NUM    CPU threads (ALL=0,DEF=$THREADS)"
+  msg "  -V        Print version and exit"
+  msg "AUTHOR\n  Torsten Seemann - https://github.com/tseemann/sixess"
+  exit
+}
+
+#...........................................................................
+# Parse the command line options
+# The initial ':' puts it in silent mode so OPTARG is set  for ?) and :)
+
+while getopts ':hqVt:o:l:' opt ; do
+  case $opt in
+    h)
+      usage
+      ;;
+    V)
+      echo "$EXE $VERSION"
+      exit
+      ;;
+    q)
+      QUIET=1
+      ;;
+    t)
+      THREADS=$OPTARG
+      ;;
+    o)
+      OUTFILE=$OPTARG
+      ;;
+    l)
+      LOGFILE=$OPTARG
+      ;;
+   \?)
+      err "Invalid option '-$OPTARG'"
+      ;;
+    :)
+      err "Option '-$OPTARG' requires an argument."
+      ;;
+  esac
+done
+
+# skip over out options
+shift $((OPTIND-1))
+
+# read our mandatory positional parameters
+[ $# -lt 1 ] && err "Please provide a file of fasta filenames"
+
+#............................................................................
+banner "Checking command line parameters"
+
+FOFN="$(readlink -f "$1")"
+[ ! -r "$FOFN" ] && err "Can not read FOFN: $FOFN"
+
+if [ "$THREADS" -eq "0" ]; then
+  THREADS=$(getconf _NPROCESSORS_ONLN)
+  msg "Auto-detected $THREADS threads"
+fi
+
+msg "Input: $FOFN"
+msg "Output: $OUTFILE"
+msg "Logfile: $LOGFILE"
+msg "Threads: $THREADS"
+
+#............................................................................
+banner "Checking external dependencies"
+
+for EXE in fastANI gzip; do
+  WHERE=$(which $EXE)
+  if [ "$WHERE" != "" ]; then
+    msg "Checking for $EXE - found $WHERE"
+  else
+    err "Could not find the required '$EXE' command"
+  fi
+done
+
+#............................................................................
+banner "Making temp dir"
+TDIR=$(mktemp -d)
+msg "Using tempdir: $TDIR"
+CMDS="$TDIR/commands.txt"
+
+#............................................................................
+banner "Writing commands: $CMDS"
+
+for A in $(cat "$FOFN"); do
+#  for B in $(cat "$FOFN"); do
+#    echo "fastANI -o /dev/stdout -r '$A' -q '$B'" >> "$CMDS"
+#  done
+  echo "fastANI -o /dev/stdout -r '$A' --ql '$FOFN'" >> "$CMDS"
+done
+
+NUMJOBS=$(wc -l < "$CMDS")
+head -n 1 "$CMDS"
+
+#............................................................................
+banner "Running $NUMJOBS jobs on $THREADS cpus"
+
+parallel -v -j "$THREADS" < "$CMDS" > "$OUTFILE" 2>> "$LOGFILE"
+
+#............................................................................
+cleanup
+
+#............................................................................
+banner "Done."
+
