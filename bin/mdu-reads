@@ -23,16 +23,18 @@ my %template = (
   'nullarbor'   => "%i\t%1\t%2\n",
   'snippy'      => "--R1 %1 --R2 %2",
   'bwamem'      => "%1 %2",
+  'minimap'     => "%1 %2",
   'megahit'	=> "--presets bulk --min-contig-len 500 -1 %1 -2 %2",
   'velvet'      => "-shortPaired -fmtAuto -separate %1 %2",
   'spades'      => "-1 %1 -2 %2",
-  'shovill'     => "shovill --outdir %i --cpus 72 --R1 %1 --R2 %2",
+  'shovill'     => "shovill --outdir %i --namefmt '%i_%05d' --R1 %1 --R2 %2\n",
+  'skesa'       => "skesa  --gz --fastq %1,%2 --use_paired_ends --memory 8 --contigs_out %i/skesa.fa\n",
   'unicycler'   => "-1 %1 -2 %2",
   'bowtie'      => "-1 %1 -2 %2",
   'pear'        => "-f %1 -r %2",
   'kraken'      => "kraken --preload --paired %1 %2 | kraken-report > %i.kraken.tab\n",
   'symlink'     => "ln -s %1 %i_R1.fq.gz ; ln -s %2 %i_R2.fq.gz\n",
-  'dirlink'     => "mkdir %i && ln -s %1 %i/%i_R1.fq.gz && ln -s %2 %i/%i_R2.fq.gz\n",
+  'dirlink'     => "mkdir %i && ln -s %1 %i/R1.fq.gz && ln -s %2 %i/R2.fq.gz\n",
 );
 
 sub list_formats {

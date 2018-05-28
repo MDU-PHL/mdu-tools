@@ -66,7 +66,6 @@ function usage {
   msg "  -l FILE   Log file ($LOGFILE)"
   msg "  -t NUM    CPU threads (ALL=0,DEF=$THREADS)"
   msg "  -V        Print version and exit"
-  msg "AUTHOR\n  Torsten Seemann - https://github.com/tseemann/sixess"
   exit
 }
 

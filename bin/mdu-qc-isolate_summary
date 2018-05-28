@@ -1,0 +1,150 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Fatal;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Date::Manip;
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+#use Path::Tiny;
+use JSON;
+
+#-------------------------------------------------------------------
+
+my @COLS = qw(
+  ISOLATE SPECIES SCHEME ST SEROTYPE MLST_ALLELES
+  AMR_GENES VIRULENCE_GENES
+  GENOME_SIZE CONTIGS NUM_CDS NUM_RRNA NUM_TRNA
+  READS YIELD AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+);
+
+#-------------------------------------------------------------------
+# command line
+
+my $rootdir = '/home/seq/MDU/QC';
+my $json    = 0;
+my $verbose = 0;
+my $quiet   = 0;
+my $SEP     = "\t";
+my $INSEP   = ";";
+my $header  = 0;
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"USAGE";
+Synopsis:
+  Generate a TSV/CSV/JSON summary of a single MDU QC folder
+Usage: 
+  $EXE [options] <isolate_ID> 
+Options:
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --quiet	No screen output ($quiet)
+  --rootdir     Source of QC data ($rootdir)
+  --json        Output in JSON format ($json)
+  --sep CHAR    Separator character ($SEP)
+  --header      Add header for tabular output
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"      => \&usage,
+  "verbose"   => \$verbose,
+  "quiet"     => \$quiet,
+  "json"      => \$json,
+  "rootdir=s" => \$rootdir,
+  "sep=s"     => \$SEP,
+  "header"    => \$header,
+) 
+or usage();
+
+MDU::Logger->quiet($quiet);
+
+#-------------------------------------------------------------------
+
+open SERO, '<', "$FindBin::RealBin/../etc/senterica.serotype.map";
+my %sero_of;
+while (<SERO>) {
+  chomp;
+  my($st,$serotype) = split m/\t/;
+  $sero_of{$st} = $serotype;
+}
+
+for my $id (@ARGV) {
+  msg("Processing: $id");
+  process_id($id);
+}
+
+#-------------------------------------------------------------------
+
+sub process_id {
+  my($id) = @_;
+  
+  my $prefix = "$rootdir/$id";
+  my %row;
+  $row{ISOLATE} = $id;
+  
+  my($gs) = qx(cat $prefix/species.txt);
+  chomp $gs;
+  $row{'SPECIES'} = $gs;
+
+  open MLST, '<', "$prefix/mlst.tab";
+  my(undef,$scheme,$st,@genes) = split m/\t/, scalar(<MLST>);
+  chomp $genes[-1];
+  $row{SCHEME} = $scheme;
+  $row{ST} = $st;
+  $row{MLST_ALLELES} = $scheme eq '-' ? '' : join(';', @genes);
+                     
+  open YIELD, '<', "$prefix/yield.tab";
+  while (<YIELD>) {
+    chomp;
+    my @x = split m/\t/;
+#    print STDERR "$id: @x\n";
+    $row{ uc($x[0]) } = $x[1];
+  }
+  delete $row{FILES};
+  close YIELD;
+  
+  my($amr) = qx(cut -f 5 $prefix/resistome.tab | sort -u | tr "\n" "$INSEP");
+  $amr =~ s/^GENE;//;  
+  $amr =~ s/;$//;
+  $row{AMR_GENES} = $amr;
+
+  my($vir) = qx(cut -f 5 $prefix/virulome.tab | sort -u | tr "\n" "$INSEP");
+  $vir =~ s/^GENE;//;  
+  $vir =~ s/;$//;
+  $row{VIRULENCE_GENES} = $vir;
+
+  $row{CONTIGS} = qx(grep -c '>' $prefix/contigs.fa);
+  chomp $row{CONTIGS};
+  $row{GENOME_SIZE} = -s "$prefix/contigs.fa"; # approx
+
+  $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
+  
+  my %ftype;
+  open GFF, '<', "$prefix/prokka.gff";
+  while (<GFF>) {
+    next if m/^#/;
+    my(undef,undef,$t) = split m/\t/;
+    $ftype{$t}++ if $t;
+  }
+  $row{NUM_CDS} = $ftype{'CDS'} || '';
+  $row{NUM_TRNA} = $ftype{'tRNA'} || '';
+  $row{NUM_RRNA} = $ftype{'rRNA'} || '';
+
+  print join($SEP, @COLS),"\n" if $header;
+  print join($SEP, map { $row{$_} || '' } @COLS), "\n";
+#  return \%row;
+}
+
+#-------------------------------------------------------------------
+
+

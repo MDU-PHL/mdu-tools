@@ -16,44 +16,37 @@ use MDU::Logger qw(msg err);
 #-------------------------------------------------------------------
 # globals
 
-#my $ARIBA_DB = "$FindBin::RealBin/../db/ariba/resfinder";
-my $TMPDIR = $ENV{'TMPDIR'} || '/tmp';
-
 #-------------------------------------------------------------------
 # command line
 
 my $verbose = 0;
 my $quiet   = 0;
-my $threads = 8;
-my $kmer    = 31;
-#my $batches = 3;
 my $rootdir = $MDU::MDUDIR;
-my $assembler = 'shovill';   # do not change
-my $scheme = 'auto';
-my $tempdir = $ENV{TMPDIR} || '/tmp';
-my %ok_asm = (spades=>0, velvet=>0, megahit=>0, shovill=>1);
+my $idfile  = '';
+my $outdir = abs_path("$rootdir/../QC");
+my $NUMCPU = num_cpus();
+my $CPU = 4;
+my $scan = 0;
 
 #-------------------------------------------------------------------
 
 sub usage {
   my $EXE = $FindBin::RealScript;
-  my $asm_opts = join(' ', keys %ok_asm);
-  print <<"USAGE";
-Synopsis:
+  print <<"EOUSAGE";
+SYNOPSIS
   Generate a Makefile to QC all the MDU isolates
-Usage: 
-  $EXE [options] > Makefile
-Options:
+USAGE
+  $EXE [options] --idfile <ids.txt>
+  $EXE [options] --scan       
+OPTIONS
   --help	This help
   --verbose	Extra debugging output ($verbose)
   --quiet	No screen output ($quiet)
-  --threads N	Threads per process ($threads)
-  --kmer    K	K-mer size for assembly ($kmer)
   --rootdir D   Folder where reads are contained ($rootdir)
-  --asm     P   Assembler: $asm_opts ($assembler)
-  --scheme  S   MLST scheme ($scheme)
-  --tempdir D   Temporary working dir ($tempdir)
-USAGE
+  --idfile  F   List of IDs to run on ($idfile)
+  --scan        Scan --rootdir for the read IDs; very slow!
+  --outdir  D   Output folder for Makefile ($outdir)
+EOUSAGE
   exit;
 }
 
@@ -61,11 +54,10 @@ GetOptions(
   "help"      => \&usage,
   "verbose"   => \$verbose,
   "quiet"     => \$quiet,
-  "threads=i" => \$threads,
   "rootdir=s" => \$rootdir,
-  "kmer=i"    => \$kmer,
-#  "asm=s"     => \$assembler,
-  "scheme=s"  => \$scheme,
+  "outdir=s" => \$outdir,
+  "idfile=s"  => \$idfile,
+  "scan!"     => \$scan,
 ) 
 or usage();
 
@@ -74,251 +66,205 @@ MDU::Logger->quiet($quiet);
 #-------------------------------------------------------------------
 # main script
 
-exists $ok_asm{$assembler} or err("Invalid assembler '$assembler'");
-
 $MDU::MDUDIR = abs_path( $rootdir ) if $rootdir;
+$idfile = abs_path($idfile) if $idfile;
+$outdir = abs_path($outdir) if $outdir;
 
-msg("Analyzing", MDU->dir);
-my @ID = MDU->all_ids();
+($scan xor $idfile) or err("Please choose --scan OR --idfile IDS.TXT");
+
+msg("Detected $NUMCPU cores.");
+
+my @ID;
+
+if ($idfile) {
+  -r $idfile or err("--idfile '$idfile' is not readable");
+  msg("Reading IDS from: $idfile");
+  open my $FH, '<', $idfile;
+  @ID = <$FH>;
+  chomp @ID;
+}
+else {
+  msg("Scanning", MDU->dir, "- please be VERY patient...");
+  @ID = MDU->all_ids();
+}
+msg("Read", 0+@ID, "IDs from", $ID[0], "to", $ID[-1]);
+
 my $count=0;
 my %reads;
 
-for my $name (sort @ID) {
-  my $id = MDU->id($name) or err("Invalid ID: $name");
-  my @reads = MDU->reads($id);
-  if (@reads != 2) {
-    msg("skipping $id as not looking like R1 R2:", MDU->dir($id));
-    next;
+unless ($idfile) {
+  $idfile = "$outdir/isolates.txt";
+  msg("Creating: $idfile");
+  open my $IDFILE, '>', $idfile;
+  print $IDFILE "$_\n" foreach (@ID);
+  close $IDFILE;
+}
+
+msg("Creating: $outdir/Makefile");
+open my $MAKEFILE, '>', "$outdir/Makefile";
+select $MAKEFILE;
+
+# makefile vars
+my $jobs = int($NUMCPU / $CPU) + 1;
+
+print "MAXCPUS := $NUMCPU\n";
+print "CPUS := $CPU\n";
+print "JOBS := $jobs\n";
+print "IDFILE := $idfile\n";
+
+# use embedded makefile at end of this script
+print while (<DATA>);
+
+for my $name (@ID) {
+  for my $N ("R1", "R2") {
+    print "$name/$N.fq.gz : \$(wildcard $rootdir/$name/*$N*q.gz)\n";
+    print "\tmkdir -p \$(\@D)\n";
+    print "\tln -s -f \$\< \$\@\n";
   }
-  msg("#$count $id @reads") if $verbose;
-  $reads{$id} = [ @reads ];
   $count++;
 }
-msg("Found $count isolates.");
+select STDOUT;
 
+msg("Now run: nice make -l $NUMCPU -j $jobs -C $outdir");
 
-#-------------------------------------------------------------------
-# construct makefile
-
-my %make;
-my $make_target = '$@';
-my $make_dep = '$<';
-my $make_deps = '$^';
-my $TEMPDIR = '$(TEMPDIR)';
-
-my $kvalues = join( q{,} , map { 31+($_*5) } (0 .. 18) );
-my $mlst_opt = (!$scheme or $scheme eq 'auto') ? "" : "--scheme $scheme";
-
-my @id = sort keys %reads;
-
-$make{all} = {
-  DEP => \@id,
-  CMD => [
-    "mdu-qc-spreadsheet > mdu-wgs.tab",
-    "tsv_to_csv.pl mdu-wgs.tab > mdu-wgs.csv",
-  ],
-};
-
-$make{ss} = {
-  CMD => [
-    "mdu-qc-spreadsheet > mdu-wgs.tab",
-    "tsv_to_csv.pl mdu-wgs.tab > mdu-wgs.csv",
-  ],
-};
-
-$make{clean} = {
-  CMD => [
-    'find . -type f -size 0 -delete -print',
-    'find . -type d -name assembler -exec rm -frv {} \;',
-  ],
-};
-
-#for my $a (keys %ok_asm) {
-#  $make{$a} = {
-#    DEP => [ map { "$_/$a.fa" } @id ],
-#  };
-#}
-
-#if ($batches > 1) {
-#  for my $b (1 .. $batches) {
-#    $make{"batch$b"} = { 
-#      DEP => \@id, # FIXME
-#    };
-#  }
-#}
-
-for my $id (@id) 
-{
-
-  $make{$id} = {
-#    DEP => [ "$id/timestamp.txt", "$id/yield.tab", "$id/species.txt", "$id/mlst.tab", "$id/abricate.tab", "$id/kmerstream.tab" ],
-    DEP => [ "$id/yield.tab", "$id/kraken.tab", "$id/mlst.tab", "$id/abricate.tab" ],
-    PHONY => 1,
-  };
-
-  $make{"$id/kraken.tab"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "kraken --threads $threads --preload --paired $make_deps | kraken-report > $make_target",
-    ]
-  };
-
-  $make{"$id/yield.tab"} = {
-    DEP => $reads{$id},
-    CMD => [ 
-      "mkdir -p '$id'",
-      "fq $make_deps > $make_target",
-    ]
-  };
-
-#  $make{"$id/contigs.fa"} = {
-#    DEP => "$id/$assembler.fa",
-#    CMD => [
-#      "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' $make_dep > $make_target",
-#      "rm -f $make_dep",
-#    ],
-#  };
-
-  my $ADIR = "$id/assembler";
-
-#  my $CMDS;
-#  if ($assembler eq 'megahit') {
-#    $CMDS = [ 
-#      "megahit --tmp-dir $TEMPDIR --min-count 3 --k-list $kmer -t $threads --memory 0.25 -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --out-dir '$ADIR' --min-contig-len 500",
-#      "cp '$ADIR/final.contigs.fa' $make_target",
-#    ];
-#  }
-#  elsif ($assembler eq 'spades') {
-#    $CMDS = [
-#      "spades.py --cpus $threads -1 '$reads{$id}->[0]' -2 '$reads{$id}->[1]' --outdir '$ADIR' --tmpdir $TEMPDIR",
-#      "cp '$ADIR/contigs.fasta' $make_target",
-#    ];
-#  }
-#  elsif ($assembler eq 'velvet') {
-#    $CMDS = [
-#      "OMP_NUM_THREADS=$threads velveth '$ADIR' $kmer -create_binary -shortPaired -fastq.gz -separate $make_deps",
-#      "OMP_NUM_THREADS=$threads velvetg '$ADIR' -exp_cov auto -cov_cutoff auto -min_contig_lgth 200",
-#      "cp '$ADIR/contigs.fa' $make_target",
-#    ];
-#  }
-#  elsif ($assembler eq 'shovill') {
-#    $CMDS = [
-#      "shovill --cpus $threads --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$ADIR' --force",
-#      "cp '$ADIR/contigs.fa' $make_target",
-#    ];
-#  }
-#  else {
-#    err("Do not know assembler '$assembler'");
-#  }
-  
-  $make{"$id/contigs.fa"} = {
-    DEP => $reads{$id},
-    CMD => [
-      "mkdir -p '$id'",
-      "rm -fr '$ADIR'",
-      "shovill --cpus $threads --R1 '$reads{$id}->[0]' --R2 '$reads{$id}->[1]' --outdir '$ADIR'",
-      "fa-add_new_ids.pl --moveid --format '$id.%05d.$assembler' '$ADIR/contigs.fa' > $make_target",
-      "rm -fr '$ADIR'",
-    ],
-  };
-
-  $make{"$id/mlst.tab"} = {
-    DEP => "$id/contigs.fa",
-    CMD => [ 
-      "mlst $mlst_opt $make_dep > $make_target",
-    ]
-  };
-
-  $make{"$id/abricate.tab"} = {
-    DEP => "$id/contigs.fa",
-    CMD => [ 
-      "abricate $make_dep > $make_target",
-    ]
-  };
-
-#  my $ARIBA_DIR = "$id/ariba";
-#  $make{"$id/ariba.tab"} = {
-#    DEP => $reads{$id},
-#    CMD => [ 
-#      "mkdir -p '$id'",
-#      "rm -fr '$ARIBA_DIR'",
-#      "ariba run --tmp_dir $TMPDIR --verbose $ARIBA_DB $make_deps $ARIBA_DIR",
-#      "cp '$ARIBA_DIR/report.tsv' $make_target",
-##      "rm -fr '$SDIR'",
-#    ]
-#  };
-#
-#  $make{"$id/sixess/species.txt"} = {
-#    DEP => $reads{$id},
-#    CMD => [ 
-#      "mkdir -p '$id/sixess'",
-#      "/home/tseemann/git/sixess/bin/sixess -f -t $threads '$id/sixess' $make_dep",
-#    ]
-#  };
-
-#  $make{"$id/kmerstream.tab"} = {
-#    DEP => $reads{$id},
-#    CMD => [ 
-#      "mkdir -p '$id'",
-#      "KmerStream --verbose -t $threads -k $kvalues --tsv --online -o /dev/stdout $make_deps ".
-#        " | KmerStreamEstimate.py /dev/stdin > $make_target",
-#    ]
-#  };
-
-#  $make{"$id/timestamp.txt"} = {
-#    DEP => $reads{$id},
-#    CMD => [ 
-#      "mkdir -p '$id'",
-#      "date -R > $make_target",
-#    ]
-#  };
-#  $make{"$id/species.txt"} = {
-#    DEP => "$id/kraken.tab",
-#    CMD => [ 
-#      "grep -P \"\tS\t\" $make_dep | sort -k1nr | head -n 1 | cut -f 6 | sed 's/^ *//' > $make_target",
-#    ]
-#  };
-
+sub num_cpus {
+  my($num)= qx(getconf _NPROCESSORS_ONLN); # POSIX
+  chomp $num;
+  return $num || 1;
 }
 
-$make{blastdb} = {
-  DEP => [ map { "$_/contigs.fa" } @id ],
-  CMD => [
-    "cat $make_deps | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs",
-  ],
-};
-
-
-msg("Writing Makefile");
-write_makefile(\%make);
-msg("Done.");
-
 #-------------------------------------------------------------------
-# write makefile
 
-sub write_makefile {
-  my($make, $fh) = @_;
-  $fh = \*STDOUT if not defined $fh;
+__DATA__
 
-  print $fh "SHELL := /bin/bash\n";
-  print $fh "MAKEFLAGS += --no-builtin-rules\n";
-  print $fh "MAKEFLAGS += --no-builtin-variables\n";
-  print $fh ".SUFFIXES:\n";
-  print $fh "TEMPDIR := $tempdir\n";
+SHELL = /bin/bash
+MAKEFLAGS += --no-builtin-rules
+MAKEFLAGS += --no-builtin-variables
+MAKEFLAGS += --load-average=$(MAXCPUS)
 
-  for my $target ('all', sort grep { $_ ne 'all' } keys %$make) {
-    print $fh "\n";
-    my $rule = $make->{$target}; # short-hand
-    my $dep = $rule->{DEP};
-    $dep = ref($dep) eq 'ARRAY' ? (join ' ', @$dep) : $dep;
-    $dep ||= '';
-    print $fh ".PHONY: $target\n" if $rule->{PHONY} or ! $rule->{DEP};
-    print $fh "$target: $dep\n";
-    if (my $cmd = $rule->{CMD}) {
-      my @cmd = ref $cmd eq 'ARRAY' ? @$cmd : ($cmd);
-      print $fh map { "\t$_\n" } @cmd;
-    }
-  }
-}
+KRAKEN_DB := /home/linuxbrew/db/kraken/minikraken
+AMR_DB := ncbi
+AMR_SEQ := /home/tseemann/git/abricate/db/$(AMR_DB)/sequences
+VIR_DB := vfdb
+VIR_SEQ := /home/tseemann/git/abricate/db/$(VIR_DB)/sequences
+MLST_SEQ := /home/tseemann/git/mlst/db/blast/mlst.fa
+SIXESS_DB := SILVA.gz
+ASSEMBLER := skesa
 
+ISOLATES := $(shell cat $(IDFILE))
+COMMANDS := contigs mlst yield resistome abricate sketch kraken species prokka
+
+.SUFFIXES:
+.DELETE_ON_ERROR:
+.SECONDARY:
+.ONESHELL:
+.DEFAULT: all
+.PHONY: all info clean blastdb $(COMMANDS)
+
+all : QC.tab prokka sketch virulome
+
+help :
+	@echo "make info          - list isolates that will be processed"
+	@echo "make               - update everything"
+	@echo "make <tool>        - $(COMMANDS)"
+	@echo "make NAME=VALUE    - KRAKEN_DB AMR_DB SIXESS_DB CPUS"
+	@echo "make ID/contigs.fa - specific isolate and analysis"
+
+info :
+	echo $(ISOLATES)  | tr " " "\n" | nl
+
+contigs : $(addsuffix /contigs.fa,$(ISOLATES))
+shovill : $(addsuffix /shovill.fa,$(ISOLATES))
+skesa : $(addsuffix /skesa.fa,$(ISOLATES))
+mlst : $(addsuffix /mlst.tab,$(ISOLATES))
+yield : $(addsuffix /yield.tab,$(ISOLATES))
+abricate : $(addsuffix /abricate.tab,$(ISOLATES))
+resistome : $(addsuffix /resistome.tab,$(ISOLATES))
+virulome : $(addsuffix /virulome.tab,$(ISOLATES))
+sketch : $(addsuffix /sketch.msh,$(ISOLATES))
+kraken : $(addsuffix /kraken.tab,$(ISOLATES))
+species : $(addsuffix /species.txt,$(ISOLATES))
+prokka : $(addsuffix /prokka.gff,$(ISOLATES))
+qc : $(addsuffix /qc.tab,$(ISOLATES))
+
+clean :
+	find . -type f -size 0 -delete -print
+	find . -type d -name assembler -exec rm -frv {} \;
+	find . -type d -name '?' -exec rm -frv {} \;
+
+FILES.tab :
+	find . -type f -printf "%P\t%s\t%T+\n" > $@
+
+QC.tab : $(addsuffix /qc.tab,$(ISOLATES))
+	rm -f $(@).tmp
+	while read ID ; do cat $$ID/qc.tab >> $(@).tmp ; done < $(IDFILE)
+	sort -u < $(@).tmp > $@
+
+QC.csv : QC.tab
+	tsv_to_csv.pl < $< > $@
+
+blastdb : mducontigs.nin
+
+mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
+	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
+
+%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff
+	mdu-qc-isolate_summary --quiet --header $(@D) > $@
+
+%/prokka.gff : %/contigs.fa %/species.txt
+	$(eval TMP := $(shell mktemp -d))
+	prokka --outdir $(TMP) --force \
+	--cpus $(CPUS) --quiet --fast \
+	--locustag $(@D) --prefix prokka \
+	--genus $(shell cut -d ' ' -f 1 $(word 2,$^)) \
+	--species $(shell cut -d ' ' -f 2 $(word 2,$^)) \
+	--strain $(@D) \
+	$< 
+	mv -f $(TMP)/prokka.gff $@
+	rm -fr $(TMP)
+
+%/contigs.fa : %/$(ASSEMBLER).fa
+	ln -v -s -f $$(basename $<) $@
+
+%/skesa.fa : %/R1.fq.gz %/R2.fq.gz
+	skesa --cores $(CPUS) --use_paired_ends \
+	--gz --fastq $(word 1,$^),$(word 2,$^) 2> /dev/null \
+	| seqtk rename - $(@D)_ \
+	| seqtk seq -U -l 60 - \
+	> $@
+
+%/shovill.fa : %/R1.fq.gz %/R2.fq.gz
+	$(eval TMP := $(shell mktemp -d))
+	shovill --cpus $(CPUS) --outdir $(TMP) --force \
+	--R1 $(word 1,$^) --R2 $(word 2,$^) \
+	--namefmt "$(@D)_%05d" 2> /dev/null
+	mv -f $(TMP)/contigs.fa $@
+	mv -f $(TMP)/contigs.gfa $(basename $@).gfa
+	rm -fr $(TMP)
+
+%/abricate.tab : %/contigs.fa
+	abricate --quiet --db resfinder $< > $@
+
+%/resistome.tab : %/contigs.fa $(AMR_SEQ)
+	abricate --quiet --db $(AMR_DB) $< > $@
+
+%/virulome.tab : %/contigs.fa $(VIR_SEQ)
+	abricate --quiet --db $(VIR_DB) $< > $@
+
+%/mlst.tab : %/contigs.fa $(MLST_SEQ)
+	mlst --quiet $< > $@
+
+%/yield.tab : %/R1.fq.gz %/R2.fq.gz
+	fq --quiet $^ > $@
+
+%/sketch.msh : %/R1.fq.gz %/R2.fq.gz
+	mash sketch -p $(CPUS) -o $(basename $@) -m 3 -r <(cat $^)
+
+%/kraken.tab : %/R1.fq.gz %/R2.fq.gz
+	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ | kraken-report --db $(KRAKEN_DB) > $@
+
+%/species.txt : %/kraken.tab
+	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
+
+%/sixess.txt : %/R1.fq.gz
+	sixess -d $(SIXESS_DB) -q -t $(CPUS) $< > $@

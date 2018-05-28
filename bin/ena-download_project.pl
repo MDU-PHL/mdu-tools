@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use LWP::Simple;
+use IO::Socket::SSL;
 use Data::Dumper;
 use Fatal;
 use File::Path qw(make_path);
