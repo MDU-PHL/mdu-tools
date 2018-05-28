@@ -17,7 +17,7 @@ use List::Util qw(sum);
 # command line
 
 my $verbose = 0;
-my $db_file = $MDU::MDUDIR."/../QC/mdu-wgs.tab";
+my $db_file = $MDU::MDUDIR."/../QC/QC.tab";
 my $logical_or = 0;
 my $csv = 0;
 my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele, $asm);
