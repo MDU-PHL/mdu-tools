@@ -98,7 +98,7 @@ sub process_id {
 
   open MLST, '<', "$prefix/mlst.tab";
   my(undef,$scheme,$st,@genes) = split m/\t/, scalar(<MLST>);
-  chomp $genes[-1];
+  chomp $genes[-1] if @genes;
   $row{SCHEME} = $scheme;
   $row{ST} = $st;
   $row{MLST_ALLELES} = $scheme eq '-' ? '' : join(';', @genes);

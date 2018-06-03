@@ -69,6 +69,10 @@ or usage();
 #-------------------------------------------------------------------
 # main script
 
+if (@ARGV == 0) {
+  exit( ! system("cat \Q$db_file\E") );
+}
+
 my %db;
 msg("Opening database: $db_file");
 open TSV, '<', $db_file;

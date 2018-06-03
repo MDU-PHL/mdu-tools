@@ -161,7 +161,7 @@ COMMANDS := contigs mlst yield resistome abricate sketch kraken species prokka
 .DEFAULT: all
 .PHONY: all info clean blastdb $(COMMANDS)
 
-all : QC.tab prokka sketch virulome
+all : QC.tab
 
 help :
 	@echo "make info          - list isolates that will be processed"
@@ -198,7 +198,8 @@ FILES.tab :
 QC.tab : $(addsuffix /qc.tab,$(ISOLATES))
 	rm -f $(@).tmp
 	while read ID ; do cat $$ID/qc.tab >> $(@).tmp ; done < $(IDFILE)
-	sort -u < $(@).tmp > $@
+	head -n 1 $< > $@
+	sort -u < $(@).tmp | grep -v '^ISOLATE' >> $@
 
 QC.csv : QC.tab
 	tsv_to_csv.pl < $< > $@
@@ -208,7 +209,7 @@ blastdb : mducontigs.nin
 mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
 
-%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff
+%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff %/sketch.msh
 	mdu-qc-isolate_summary --quiet --header $(@D) > $@
 
 %/prokka.gff : %/contigs.fa %/species.txt
