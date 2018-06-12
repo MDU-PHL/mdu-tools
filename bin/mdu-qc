@@ -86,6 +86,7 @@ if ($idfile) {
 else {
   msg("Scanning", MDU->dir, "- please be VERY patient...");
   @ID = MDU->all_ids();
+  @ID = reverse sort @ID;  # get new ones at top
 }
 msg("Read", 0+@ID, "IDs from", $ID[0], "to", $ID[-1]);
 
@@ -142,6 +143,8 @@ MAKEFLAGS += --no-builtin-rules
 MAKEFLAGS += --no-builtin-variables
 MAKEFLAGS += --load-average=$(MAXCPUS)
 
+SORT := LC_ALL=C sort --parallel=$(CPUS) --buffer-size=4G
+
 KRAKEN_DB := /home/linuxbrew/db/kraken/minikraken
 AMR_DB := ncbi
 AMR_SEQ := /home/tseemann/git/abricate/db/$(AMR_DB)/sequences
@@ -149,10 +152,13 @@ VIR_DB := vfdb
 VIR_SEQ := /home/tseemann/git/abricate/db/$(VIR_DB)/sequences
 MLST_SEQ := /home/tseemann/git/mlst/db/blast/mlst.fa
 SIXESS_DB := SILVA.gz
-ASSEMBLER := skesa
+#ASSEMBLER := skesa
 
 ISOLATES := $(shell cat $(IDFILE))
-COMMANDS := contigs mlst yield resistome abricate sketch kraken species prokka
+
+COMMANDS := contigs shovill skesa \
+	    mlst yield resistome abricate virulome \
+            sketch kraken species prokka stats qc
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
@@ -185,21 +191,23 @@ sketch : $(addsuffix /sketch.msh,$(ISOLATES))
 kraken : $(addsuffix /kraken.tab,$(ISOLATES))
 species : $(addsuffix /species.txt,$(ISOLATES))
 prokka : $(addsuffix /prokka.gff,$(ISOLATES))
+stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
 qc : $(addsuffix /qc.tab,$(ISOLATES))
 
+# remove empty files, dead symlinks, temp folders, or java bug folders
 clean :
-	find . -type f -size 0 -delete -print
+	find . -type f -size 0 -printf "EMPTY_FILE: %p\n" -delete
+        find . -xtype l -printf "DEAD_SYMLINK: %p\n" -delete
 	find . -type d -name assembler -exec rm -frv {} \;
-	find . -type d -name '?' -exec rm -frv {} \;
 
 FILES.tab :
 	find . -type f -printf "%P\t%s\t%T+\n" > $@
 
 QC.tab : $(addsuffix /qc.tab,$(ISOLATES))
 	rm -f $(@).tmp
-	while read ID ; do cat $$ID/qc.tab >> $(@).tmp ; done < $(IDFILE)
+	while read ID ; do cat "$$ID/qc.tab" >> $(@).tmp ; done < $(IDFILE)
 	head -n 1 $< > $@
-	sort -u < $(@).tmp | grep -v '^ISOLATE' >> $@
+	$(SORT) --unique $(@).tmp | grep -v '^ISOLATE' >> $@
 
 QC.csv : QC.tab
 	tsv_to_csv.pl < $< > $@
@@ -209,7 +217,7 @@ blastdb : mducontigs.nin
 mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
 
-%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff %/sketch.msh
+%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff %/sketch.msh %/R1.stats.tab %/R2.stats.tab
 	mdu-qc-isolate_summary --quiet --header $(@D) > $@
 
 %/prokka.gff : %/contigs.fa %/species.txt
@@ -224,21 +232,22 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	mv -f $(TMP)/prokka.gff $@
 	rm -fr $(TMP)
 
-%/contigs.fa : %/$(ASSEMBLER).fa
-	ln -v -s -f $$(basename $<) $@
+#%/contigs.fa : %/$(ASSEMBLER).fa
+#	ln -v -s -f $$(basename $<) $@
+
+%/contigs.fa : %/skesa.fa
+	seqtk rename $< $(@D)_ | seqtk seq -U -l 60 - > $@
 
 %/skesa.fa : %/R1.fq.gz %/R2.fq.gz
 	skesa --cores $(CPUS) --use_paired_ends \
-	--gz --fastq $(word 1,$^),$(word 2,$^) 2> /dev/null \
-	| seqtk rename - $(@D)_ \
-	| seqtk seq -U -l 60 - \
-	> $@
+	--gz --fastq $(word 1,$^),$(word 2,$^) \
+	--contigs_out $@
 
 %/shovill.fa : %/R1.fq.gz %/R2.fq.gz
 	$(eval TMP := $(shell mktemp -d))
 	shovill --cpus $(CPUS) --outdir $(TMP) --force \
 	--R1 $(word 1,$^) --R2 $(word 2,$^) \
-	--namefmt "$(@D)_%05d" 2> /dev/null
+	--namefmt "$(@D)_%5d" 2> /dev/null
 	mv -f $(TMP)/contigs.fa $@
 	mv -f $(TMP)/contigs.gfa $(basename $@).gfa
 	rm -fr $(TMP)
@@ -257,6 +266,12 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 
 %/yield.tab : %/R1.fq.gz %/R2.fq.gz
 	fq --quiet $^ > $@
+
+%/R1.stats.tab : %/R1.fq.gz
+	seqtk fqchk $< > $@
+
+%/R2.stats.tab : %/R2.fq.gz
+	seqtk fqchk $< > $@
 
 %/sketch.msh : %/R1.fq.gz %/R2.fq.gz
 	mash sketch -p $(CPUS) -o $(basename $@) -m 3 -r <(cat $^)

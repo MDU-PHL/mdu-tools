@@ -11,7 +11,7 @@ use FindBin;
 use lib "$FindBin::RealBin/../perl5";
 use MDU;
 use MDU::Logger qw(msg err);
-use List::Util qw(sum);
+use List::Util qw(sum max);
 
 #-------------------------------------------------------------------
 # command line
@@ -20,7 +20,14 @@ my $verbose = 0;
 my $db_file = $MDU::MDUDIR."/../QC/QC.tab";
 my $logical_or = 0;
 my $csv = 0;
-my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele, $asm);
+my $count = 0;
+my $columns = 0;
+my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele, $depth, $year);
+
+# special case if no arguments, dump whole DB
+if (@ARGV == 0) {
+  exit( ! system("cat \Q$db_file\E") );
+}
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -32,18 +39,20 @@ Usage:
 Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
+  --count       Just print count of matching isolates
+  --count       Show the available colums
   --csv	        Write CSV instead of TSV/TAB
   --db FILE     CSV of isolate data ($db_file)
   --or          Do logical OR instead of AND
   --species P   Match SPECIES 
-  --st      X   Match ST
+  --st      X   Match ST exactly
   --allele  G   Match ST Alleles
   --scheme  P   Match SCHEME
   --id      P   Match ISOLATE
-  --date    P   Match ANALYSIS_DATE
   --amr     G   Match AMR_GENES
   --sero    G   Match SEROTYPE
-  --asm     A   Match ASSEMBLER
+  --depth   D   Has DEPTH less than D
+  --year    Y   ISOLATE name starts with Y
 USAGE
   exit;
 }
@@ -58,20 +67,18 @@ GetOptions(
   "st=s"      => \$seqtype,
   "scheme=s"  => \$scheme,
   "id=s"      => \$isolate,
-  "date=s"    => \$date,
+  "year=i"    => \$year,
   "amr=s"     => \$amr,
   "sero=s"    => \$sero,
   "allele=s"  => \$allele,
-  "asm=s"     => \$asm,
+  "depth=i"    => \$depth,
+  "count!"    => \$count,
+  "columns!"  => \$columns,
 ) 
 or usage();
 
 #-------------------------------------------------------------------
 # main script
-
-if (@ARGV == 0) {
-  exit( ! system("cat \Q$db_file\E") );
-}
 
 my %db;
 msg("Opening database: $db_file");
@@ -87,11 +94,29 @@ while (my $line = <TSV>) {
   }
   $line = tab_to_csv($line) if $csv;
   $db{$x[0]}{LINE} = $line;
+
+  # calculated fields
+  my $rec = $db{ $x[0] };
+  push @hdr, 'DEPTH';
+  $rec->{DEPTH} = int( $rec->{YIELD} / $rec->{GENOME_SIZE} );
+
+  if ($columns) {
+    my $c = 0;
+    my $L = max( map { length } @hdr );
+    for my $col (@hdr) {
+      printf "%2d  %-*s  %s\n", $c++, $L, $col, $db{$x[0]}{$col};
+    }
+    exit(0);
+  }
 }
 close TSV;
 msg("Read", scalar(keys %db), "isolates.");
 
-my $pass = sum( map { $_ ? 1 : 0 } ($species, $seqtype, $sero, $scheme, $isolate, $date, $amr, $allele, $asm) );
+my $pass = sum( 
+  map { $_ ? 1 : 0 } 
+    ($species, $seqtype, $sero, $scheme, $isolate, 
+     $amr, $allele, $depth, $year)
+);
 $pass = 1 if $logical_or and $pass >= 1;
 $pass ||= 1E9;
 my @match;
@@ -105,12 +130,14 @@ for my $id (keys %db) {
   $score++ if $date    and $db{$id}{ANALYSIS_DATE} =~ m/$date/;
   $score++ if $amr     and $db{$id}{AMR_GENES}     =~ m/$amr/i;
   $score++ if $sero    and $db{$id}{SEROTYPE}      =~ m/$sero/i;
-  $score++ if $asm     and $db{$id}{ASSEMBLER}     =~ m/$asm/i;
+  $score++ if $depth   and $db{$id}{DEPTH} < $depth;
+  $score++ if $year    and $db{$id}{ISOLATE} =~ m/^$year/;
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
 msg("Found", 0+@match, "matches");
 $header = tab_to_csv($header) if $csv;
-print $header, map { "$_\n" } @match if @match > 0;
+print $header, map { "$_\n" } @match if @match > 0 and !$count
+;
 
 #-------------------------------------------------------------------
 
@@ -120,3 +147,4 @@ sub tab_to_csv {
   $line =~ s/\t/,/g;
   return $line;
 }
+

@@ -11,6 +11,16 @@ use FindBin;
 use lib "$FindBin::RealBin/../perl5";
 use MDU;
 use MDU::Logger qw(msg err);
+use Path::Tiny;
+use Cwd 'realpath';
+
+#-------------------------------------------------------------------
+# globals
+
+my @ASM_PREF = (qw'shovill.fa spades-fast.fa spades.fa skesa.fa');
+my $RM = "rm -fv";
+my $CP = "cp -fv";
+my $MIN_ASM_SIZE = 1000;
 
 #-------------------------------------------------------------------
 # command line
@@ -18,51 +28,129 @@ use MDU::Logger qw(msg err);
 my $verbose = 0;
 my $quiet   = 0;
 my $minsize = 30; # Megabytes
+my $idfile  = '';
+my $nosort  = 0;
+my $rootdir = $MDU::MDUDIR . "/../QC";
 
 sub usage {
   my $EXE = $FindBin::RealScript;
   print <<"USAGE";
 Synopsis:
-  List all MDU files and report bad isolates
+  Examine MDU QC for inconsistencies and suggest fixes
 Usage: 
-  $EXE [options] [--format XXX] [ID1 ID2 ...]
+  $EXE [options] { --idfile IDS.txt | ID1 ID2 ... IDn }
 Options:
   --help	This help
   --verbose	Extra debugging output
   --quiet	No screen output
+  --idfile      File of IDs to check
+  --nosort      Don't sort IDs
+  --rootdir     MDU data root directory
   --minsize XX	Minimum file size in MB to accept ($minsize)
 USAGE
   exit;
 }
 
 GetOptions(
-  "help"     => \&usage,
-  "verbose"  => \$verbose,
-  "quiet"    => \$quiet,
+  "help"      => \&usage,
+  "verbose"   => \$verbose,
+  "quiet"     => \$quiet,
   "minsize=i" => \$minsize,
+  "idfile=s"  => \$idfile,
+  "nosort!"   => \$nosort,
+  "rootdir=s" => \$rootdir,
 ) 
 or usage();
+
+$rootdir or err("--rootdir is empty");
+-d $rootdir or err("Bad --rootdir $rootdir");
+$rootdir = realpath($rootdir);
 
 MDU::Logger->quiet($quiet);
 
 #-------------------------------------------------------------------
-# main script
+# get IDS
 
-#my $home = MDU->dir;
-my @ID = @ARGV ? @ARGV : MDU->all_ids();
-my $count=0;
+msg("Using data from: $rootdir");
 
-for my $name (sort @ID) {
-  my $id = MDU->id($name) or err("Invalid ID: $name");
-  my @reads = MDU->reads($id);
-  err("$id - need to fix read files:", MDU->dir($id)) unless @reads==2;
-  my @sizes = map { int( (-s $_)/1E6 ) } @reads;
-  for my $i (0 .. $#reads) {
-    err("$id - read file $reads[$i] too small: $sizes[$i] < $minsize MB") if $sizes[$i] < $minsize;
-  }
-  print join("\t", $id, @sizes, @reads),"\n";
-  $count++;
+my @ID;
+if ($idfile) {
+  -r $idfile or err("Can't read --idfile $idfile");
+  @ID = path($idfile)->lines( { chomp=>1 } );
 }
-print "Found $count isolates.\n";
+elsif (@ARGV) {
+  @ID = @ARGV;
+}
+else {
+  @ID = MDU->all_ids();
+}
+@ID = reverse sort @ID unless $nosort;
+my $N = scalar(@ID);
+msg("Considering $N isolates.");
 
 #-------------------------------------------------------------------
+# check each isolate ID
+
+my($count,$ok,$broken,$fixed) = (0,0,0,0);
+my %seen;
+
+for my $id (@ID) 
+{
+  next unless $id;
+  next if $id =~ m/^#/;
+  next if $seen{$id}++;
+  
+  my $ctg = "$rootdir/$id/contigs.fa";
+  msg("Examining: $id => $ctg") if $verbose;
+
+  if (! -d "$rootdir/../READS/$id") {
+    print "$RM -r '$rootdir/$id'  # no reads anymore\n";
+    next;
+  }
+
+  if (-r $ctg) {
+    if (-s $ctg <= $MIN_ASM_SIZE) {
+      print "$RM '$ctg' # less than $MIN_ASM_SIZE\n";
+      $broken++;
+    }
+    else {
+      #print "# OK - $ctg\n";
+      $ok++; 
+    }
+  }
+  else {
+    my $found=0;
+    for my $asm (@ASM_PREF) {
+      my $src = "$rootdir/$id/$asm";
+      if (-s $src) {
+        print "seqtk rename '$src' $id. > '$ctg' # recovering\n";
+        $found=1;
+        $fixed++;
+        last;
+      }
+    }
+    print "make -C $rootdir CPUS=72 $id/contigs.fa # no contigs at all\n" unless $found;
+    $fixed++;
+  }
+  
+  my $prokka = "$rootdir/$id/prokka.gff";
+  if (! -r $prokka) {
+    print "make -C $rootdir CPUS=18 $id/prokka.gff \# no annotation prokka\n";
+  } 
+
+  $count++;
+}  
+msg("Processed=$count/$N isolates; $ok ok, $broken not fixed, $fixed fixed.");
+
+#  my @reads = MDU->reads($id);
+#  err("$id - need to fix read files:", MDU->dir($id)) unless @reads==2;
+#  my @sizes = map { int( (-s $_)/1E6 ) } @reads;
+#  for my $i (0 .. $#reads) {
+#    err("$id - read file $reads[$i] too small: $sizes[$i] < $minsize MB") if $sizes[$i] < $minsize;
+#  }
+#  print join("\t", $id, @sizes, @reads),"\n";
+
+#-------------------------------------------------------------------
+
+
+

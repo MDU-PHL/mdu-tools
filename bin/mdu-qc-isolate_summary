@@ -15,6 +15,7 @@ use MDU;
 use MDU::Logger qw(msg err);
 #use Path::Tiny;
 use JSON;
+use List::Util qw(uniqstr);
 
 #-------------------------------------------------------------------
 
@@ -22,6 +23,7 @@ my @COLS = qw(
   ISOLATE SPECIES SCHEME ST SEROTYPE MLST_ALLELES
   AMR_GENES VIRULENCE_GENES
   GENOME_SIZE CONTIGS NUM_CDS NUM_RRNA NUM_TRNA
+  INSTRUMENT FLOWCELL QVALUES
   READS YIELD AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
 );
 
@@ -68,6 +70,8 @@ or usage();
 
 MDU::Logger->quiet($quiet);
 
+$json and err("Sorry, --json is currently not supported");
+
 #-------------------------------------------------------------------
 
 open SERO, '<', "$FindBin::RealBin/../etc/senterica.serotype.map";
@@ -85,6 +89,15 @@ for my $id (@ARGV) {
 
 #-------------------------------------------------------------------
 
+sub list_to_cell {
+  my(@list) = @_;
+  chomp @list;
+  shift @list;
+  return join $INSEP, (sort { $a cmp $b } uniqstr @list);
+}  
+
+#-------------------------------------------------------------------
+
 sub process_id {
   my($id) = @_;
   
@@ -97,11 +110,11 @@ sub process_id {
   $row{'SPECIES'} = $gs;
 
   open MLST, '<', "$prefix/mlst.tab";
-  my(undef,$scheme,$st,@genes) = split m/\t/, scalar(<MLST>);
-  chomp $genes[-1] if @genes;
-  $row{SCHEME} = $scheme;
-  $row{ST} = $st;
-  $row{MLST_ALLELES} = $scheme eq '-' ? '' : join(';', @genes);
+  my(undef, @mlst) = split m/\t/, scalar(<MLST>);
+  chomp @mlst;
+  $row{SCHEME} = shift @mlst;
+  $row{ST} = shift @mlst;
+  $row{MLST_ALLELES} = @mlst ? join(';', @mlst) : '';
                      
   open YIELD, '<', "$prefix/yield.tab";
   while (<YIELD>) {
@@ -113,15 +126,11 @@ sub process_id {
   delete $row{FILES};
   close YIELD;
   
-  my($amr) = qx(cut -f 5 $prefix/resistome.tab | sort -u | tr "\n" "$INSEP");
-  $amr =~ s/^GENE;//;  
-  $amr =~ s/;$//;
-  $row{AMR_GENES} = $amr;
+  my(@amr) = qx(cut -f 5 $prefix/resistome.tab);
+  $row{AMR_GENES} = list_to_cell(@amr);
 
-  my($vir) = qx(cut -f 5 $prefix/virulome.tab | sort -u | tr "\n" "$INSEP");
-  $vir =~ s/^GENE;//;  
-  $vir =~ s/;$//;
-  $row{VIRULENCE_GENES} = $vir;
+  my(@vir) = qx(cut -f 5 $prefix/virulome.tab);
+  $row{VIRULENCE_GENES} = list_to_cell(@vir);
 
   $row{CONTIGS} = qx(grep -c '>' $prefix/contigs.fa);
   chomp $row{CONTIGS};
@@ -129,6 +138,15 @@ sub process_id {
 
   $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
   
+  my($readid) = qx(gunzip -c -d \Q$prefix/R1.fq.gz\E | head -n 1);
+  $readid =~ m/^\@(.*?):\d+:(.*?):/;
+  $row{INSTRUMENT} = $1 || '';
+  $row{FLOWCELL} = $2 || '';
+  
+  my($fqchk) = qx(head -n 1 \Q$prefix/R1.stats.tab\E);
+  $fqchk =~ m/(\d+) distinct quality/;
+  $row{QVALUES} = $1;
+
   my %ftype;
   open GFF, '<', "$prefix/prokka.gff";
   while (<GFF>) {
