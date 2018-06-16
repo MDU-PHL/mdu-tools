@@ -22,11 +22,11 @@ $barcodes or err("Please provide --barcodes B1,B2,B3,B4,...");
 $transposon or err("Please provide a --transposon [AGTC]+");
 $prefix or err("Please provide a --prefix FILENAME");
 if ($prefix eq 'AUTO') {
-  $prefix = path($fastq)->basename(qw/\.f(ast)?q(\.gz)?/);
+  $prefix = path($fastq)->basename(qr/\.f(ast)?q(\.gz)?/);
   msg("Setting --prefix to '$prefix'");
 }
 #-r $ref or err("Reference --ref '$ref' is not readable");
-exit;
+#exit;
 
 # make output folder
 path($outdir)->mkpath unless -d $outdir;
@@ -108,10 +108,11 @@ for my $b (@bc) {
 }
 
 # save output
-path("$outdir/$prefix/results.txt")->spew(Dumper(\%stat, \%barcode, \%taglen));
+path("$outdir/$prefix.txt")->spew(Dumper(\%stat, \%barcode, \%taglen));
 
 # Finish up
 msg("Results in: $outdir");
+msg("File: $_") for (sort glob("$outdir/$prefix*"));
 msg("Done.");
 exit(0);
 
@@ -195,7 +196,7 @@ sub setOptions {
     {OPT=>"minlen=i",  VAR=>\$minlen, DEFAULT=>15, DESC=>"Minimum length of tag to keep"},
     {OPT=>"screen!",  VAR=>\$screen, DEFAULT=>0, DESC=>"Screen against PhiX-174"},
     {OPT=>"kmer=i",  VAR=>\$kmer, DEFAULT=>12, DESC=>"K-mer size for --screen"},
-    {OPT=>"ref=s",  VAR=>\$ref, DEFAULT=>'', DESC=>"Reference genome"},
+#    {OPT=>"ref=s",  VAR=>\$ref, DEFAULT=>'', DESC=>"Reference genome"},
   );
 
   (!@ARGV) && (usage());
