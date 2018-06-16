@@ -181,7 +181,9 @@ info :
 
 contigs : $(addsuffix /contigs.fa,$(ISOLATES))
 shovill : $(addsuffix /shovill.fa,$(ISOLATES))
+spades : $(addsuffix /spades.fa,$(ISOLATES))
 skesa : $(addsuffix /skesa.fa,$(ISOLATES))
+
 mlst : $(addsuffix /mlst.tab,$(ISOLATES))
 yield : $(addsuffix /yield.tab,$(ISOLATES))
 abricate : $(addsuffix /abricate.tab,$(ISOLATES))
@@ -243,13 +245,32 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	--gz --fastq $(word 1,$^),$(word 2,$^) \
 	--contigs_out $@
 
+%/shovill-skesa.fa : %/R1.fq.gz %/R2.fq.gz
+	$(eval TMP := $(shell mktemp -d))
+	shovill --cpus $(CPUS) --outdir $(TMP) --force \
+	--R1 $(word 1,$^) --R2 $(word 2,$^) \
+	--assembler skesa --nocorr --noreadcorr \
+	--namefmt "$(@D)_%5d"
+	mv -f $(TMP)/contigs.fa $@
+	mv -f $(TMP)/shovill.log $(basename $@).log
+	rm -fr $(TMP)
+
 %/shovill.fa : %/R1.fq.gz %/R2.fq.gz
 	$(eval TMP := $(shell mktemp -d))
 	shovill --cpus $(CPUS) --outdir $(TMP) --force \
 	--R1 $(word 1,$^) --R2 $(word 2,$^) \
-	--namefmt "$(@D)_%5d" 2> /dev/null
+	--assembler spades \
+	--namefmt "$(@D)_%5d"
 	mv -f $(TMP)/contigs.fa $@
 	mv -f $(TMP)/contigs.gfa $(basename $@).gfa
+	rm -fr $(TMP)
+
+%/spades.fa : %/R1.fq.gz %/R2.fq.gz
+	$(eval TMP := $(shell mktemp -d))
+	spades.py -t $(CPUS) -o $(TMP) -1 $(word 1,$^) -2 $(word 2,$^) --careful
+	mv -f $(TMP)/scaffolds.fasta $@
+	mv -f $(TMP)/assembly_graph_with_scaffolds.gfa $(basename $@).gfa
+	mv -f $(TMP)/spades.log $(basename $@).log
 	rm -fr $(TMP)
 
 %/abricate.tab : %/contigs.fa
