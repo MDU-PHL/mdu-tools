@@ -1,0 +1,114 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+use Path::Tiny;
+use Cwd 'realpath';
+use List::MoreUtils qw(zip);
+
+#-------------------------------------------------------------------
+# globals
+
+my $LN = "ln -sf";
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $quiet   = 0;
+my $srcdir = realpath( $MDU::MDUDIR . "/../QC" );
+my $destdir = realpath( $MDU::MDUDIR . "/../QC.sorted" );
+my $qcfile = "$srcdir/QC.tab";
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"EOH";
+SYNOPSIS
+  Make a symlink forest of QC to QC.sorted using QC.tab
+USAGE
+  $EXE [options]
+OPTIONS
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --quiet	No screen output ($quiet)
+  --srcdir      Source QC folder ($srcdir)
+  --destdir     Dest QC.sorted folder ($destdir)
+  --qcfile      Location of QC.tab ($qcfile)
+NOTES
+  Only Torsten should ever run this
+EOH
+  exit;
+}
+
+GetOptions(
+  "help"       => \&usage,
+  "verbose"    => \$verbose,
+  "quiet"      => \$quiet,
+  "srcdir=s"   => \$srcdir,
+  "destdir=s"  => \$destdir,
+  "qcfile=s"   => \$qcfile,
+) 
+or usage();
+
+-d $srcdir or err("Bad --srcdir $srcdir");
+-d $destdir or err("Bad --destdir $destdir");
+-r $qcfile or err("Bad --qcfile $qcfile");
+
+MDU::Logger->quiet($quiet);
+
+#-------------------------------------------------------------------
+# get IDS
+
+my %db;
+my @hdr;
+my $row=0;
+open my $QC, '<', $qcfile;
+while (<$QC>) {
+  chomp;
+  my @row = split m/\t/;
+  if ($row==0) {
+    @hdr = @row;
+  }
+  else {
+    my %hash = zip @hdr, @row;
+    my $ST = $hash{ST} or err("No ST for: @row");
+    my $GS = $hash{SPECIES} or err("No SPECIES for: @row");
+    $ST = $ST eq '-' ? 'unknown' : "ST$ST";
+    if ($ST and $GS) {
+      push @{ $db{$GS}{$ST} }, $hash{ISOLATE};
+    }
+  }
+  $row++;
+}
+
+#print Dumper(\%db);
+
+print "set -x\n";
+print "rm -fr '$destdir'\n";
+print "mkdir -p '$destdir'\n";
+for my $sp (keys %db) {
+  for my $st (keys %{$db{$sp}}) {
+    my $species = $sp;
+    $species =~ s{ }{/}; # first space is after genus, make a folder
+    $species =~ s/\s+/_/g; # other spaces just make underscores
+    my $dd = "$destdir/$species/$st";
+    print "mkdir -p '$dd'\n";
+    for my $id (@{$db{$sp}{$st}}) {
+      print "ln -s '$srcdir/$id' '$dd/$id'\n";
+    }
+  }
+}
+
+#-------------------------------------------------------------------
+
+
+
