@@ -40,7 +40,7 @@ Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
   --count       Just print count of matching isolates
-  --count       Show the available colums
+  --cols        Show the available colums
   --csv	        Write CSV instead of TSV/TAB
   --db FILE     CSV of isolate data ($db_file)
   --or          Do logical OR instead of AND
@@ -101,7 +101,7 @@ while (my $line = <TSV>) {
   $rec->{DEPTH} = int( $rec->{YIELD} / $rec->{GENOME_SIZE} );
 
   if ($columns) {
-    my $c = 0;
+    my $c = 1;
     my $L = max( map { length } @hdr );
     for my $col (@hdr) {
       printf "%2d  %-*s  %s\n", $c++, $L, $col, $db{$x[0]}{$col};

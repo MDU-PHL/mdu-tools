@@ -25,7 +25,8 @@ my $rootdir = $MDU::MDUDIR;
 my $idfile  = '';
 my $outdir = abs_path("$rootdir/../QC");
 my $NUMCPU = num_cpus();
-my $CPU = 4;
+my $CPU = 8;
+my $RAM = 32; # GB
 my $scan = 0;
 
 #-------------------------------------------------------------------
@@ -111,6 +112,7 @@ my $jobs = int($NUMCPU / $CPU) + 1;
 print "MAXCPUS := $NUMCPU\n";
 print "CPUS := $CPU\n";
 print "JOBS := $jobs\n";
+print "RAM := $RAM\n";
 print "IDFILE := $idfile\n";
 
 # use embedded makefile at end of this script
@@ -146,13 +148,16 @@ MAKEFLAGS += --load-average=$(MAXCPUS)
 SORT := LC_ALL=C sort --parallel=$(CPUS) --buffer-size=4G
 
 KRAKEN_DB := /home/linuxbrew/db/kraken/minikraken
+KRAKEN2_DB := /home/linuxbrew/db/kraken2/microbe
+CENTRIFUGE_DB := /bio/db/centrifuge/bacvirhum/p_compressed+h+v
 AMR_DB := ncbi
 AMR_SEQ := /home/tseemann/git/abricate/db/$(AMR_DB)/sequences
 VIR_DB := vfdb
 VIR_SEQ := /home/tseemann/git/abricate/db/$(VIR_DB)/sequences
 MLST_SEQ := /home/tseemann/git/mlst/db/blast/mlst.fa
 SIXESS_DB := SILVA.gz
-#ASSEMBLER := skesa
+SPECIES_SRC := kraken2.tab
+ASSEMBLER := shovill
 
 ISOLATES := $(shell cat $(IDFILE))
 
@@ -173,13 +178,12 @@ help :
 	@echo "make info          - list isolates that will be processed"
 	@echo "make               - update everything"
 	@echo "make <tool>        - $(COMMANDS)"
-	@echo "make NAME=VALUE    - KRAKEN_DB AMR_DB SIXESS_DB CPUS"
+	@echo "make NAME=VALUE    - KRAKEN_DB AMR_DB SIXESS_DB CPUS RAM"
 	@echo "make ID/contigs.fa - specific isolate and analysis"
 
 info :
 	echo $(ISOLATES)  | tr " " "\n" | nl
 
-contigs : $(addsuffix /contigs.fa,$(ISOLATES))
 shovill : $(addsuffix /shovill.fa,$(ISOLATES))
 spades : $(addsuffix /spades.fa,$(ISOLATES))
 skesa : $(addsuffix /skesa.fa,$(ISOLATES))
@@ -190,7 +194,9 @@ abricate : $(addsuffix /abricate.tab,$(ISOLATES))
 resistome : $(addsuffix /resistome.tab,$(ISOLATES))
 virulome : $(addsuffix /virulome.tab,$(ISOLATES))
 sketch : $(addsuffix /sketch.msh,$(ISOLATES))
-kraken : $(addsuffix /kraken.tab,$(ISOLATES))
+#kraken : $(addsuffix /kraken.tab,$(ISOLATES))
+kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
+#centrifuge : $(addsuffix /centrifuge.tab,$(ISOLATES))
 species : $(addsuffix /species.txt,$(ISOLATES))
 prokka : $(addsuffix /prokka.gff,$(ISOLATES))
 stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
@@ -219,7 +225,10 @@ blastdb : mducontigs.nin
 mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
 
-%/qc.tab : %/contigs.fa %/resistome.tab %/virulome.tab %/mlst.tab %/species.txt %/yield.tab %/prokka.gff %/sketch.msh %/R1.stats.tab %/R2.stats.tab
+%/qc.tab : %/kraken2.tab %/species.txt %/sketch.msh \
+           %/yield.tab %/R1.stats.tab %/R2.stats.tab \
+           %/contigs.fa %/prokka.gff \
+           %/resistome.tab %/virulome.tab %/mlst.tab
 	mdu-qc-isolate_summary --quiet --header $(@D) > $@
 
 %/prokka.gff : %/contigs.fa %/species.txt
@@ -234,12 +243,21 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	mv -f $(TMP)/prokka.gff $@
 	rm -fr $(TMP)
 
-#%/contigs.fa : %/$(ASSEMBLER).fa
-#	ln -v -s -f $$(basename $<) $@
+%/contigs.fa : %/$(ASSEMBLER).fa
+	cp -v -f $< $@
 
-%/contigs.fa : %/skesa.fa
-	seqtk rename $< $(@D)_ | seqtk seq -U -l 60 - > $@
-
+%/shovill.fa : %/R1.fq.gz %/R2.fq.gz
+	$(eval TMP := $(shell mktemp -d))
+	shovill --cpus $(CPUS) --ram $(RAM) \
+	--outdir $(TMP) --force \
+	--R1 $(word 1,$^) --R2 $(word 2,$^) \
+	--assembler spades \
+	--namefmt "$(@D)_%05d"
+	mv -f $(TMP)/contigs.fa $@
+	mv -f $(TMP)/contigs.gfa $(basename $@).gfa
+	mv -f $(TMP)/shovill.log $(basename $@).log
+	rm -fr $(TMP)
+	
 %/skesa.fa : %/R1.fq.gz %/R2.fq.gz
 	skesa --cores $(CPUS) --use_paired_ends \
 	--gz --fastq $(word 1,$^),$(word 2,$^) \
@@ -247,22 +265,13 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 
 %/shovill-skesa.fa : %/R1.fq.gz %/R2.fq.gz
 	$(eval TMP := $(shell mktemp -d))
-	shovill --cpus $(CPUS) --outdir $(TMP) --force \
+	shovill --cpus $(CPUS) --ram $(RAM) \
+	--outdir $(TMP) --force \
 	--R1 $(word 1,$^) --R2 $(word 2,$^) \
 	--assembler skesa --nocorr --noreadcorr \
-	--namefmt "$(@D)_%5d"
+	--namefmt "$(@D)_%05d"
 	mv -f $(TMP)/contigs.fa $@
 	mv -f $(TMP)/shovill.log $(basename $@).log
-	rm -fr $(TMP)
-
-%/shovill.fa : %/R1.fq.gz %/R2.fq.gz
-	$(eval TMP := $(shell mktemp -d))
-	shovill --cpus $(CPUS) --outdir $(TMP) --force \
-	--R1 $(word 1,$^) --R2 $(word 2,$^) \
-	--assembler spades \
-	--namefmt "$(@D)_%5d"
-	mv -f $(TMP)/contigs.fa $@
-	mv -f $(TMP)/contigs.gfa $(basename $@).gfa
 	rm -fr $(TMP)
 
 %/spades.fa : %/R1.fq.gz %/R2.fq.gz
@@ -285,8 +294,8 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 %/mlst.tab : %/contigs.fa $(MLST_SEQ)
 	mlst --quiet $< > $@
 
-%/yield.tab : %/R1.fq.gz %/R2.fq.gz
-	fq --quiet $^ > $@
+%/yield.tab : %/contigs.fa %/R1.fq.gz %/R2.fq.gz
+	fq --quiet --ref $^  > $@
 
 %/R1.stats.tab : %/R1.fq.gz
 	seqtk fqchk $< > $@
@@ -298,9 +307,18 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	mash sketch -p $(CPUS) -o $(basename $@) -m 3 -r <(cat $^)
 
 %/kraken.tab : %/R1.fq.gz %/R2.fq.gz
-	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ | kraken-report --db $(KRAKEN_DB) > $@
+	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ \
+	| kraken-report --db $(KRAKEN_DB) > $@
 
-%/species.txt : %/kraken.tab
+%/kraken2.tab : %/R1.fq.gz %/R2.fq.gz
+	kraken2 --threads $(CPUS) --db $(KRAKEN2_DB) --memory-mapping \
+	--output - --report $@ --paired $^
+
+%/centrifuge.tab : %/R1.fq.gz %/R2.fq.gz
+	centrifuge -x $(CENTRIFUGE_DB) -p $(CPUS) -1 $(word 1,$^) -2 $(word 2,$^) \
+	| centrifuge-kreport -x $(CENTRIFUGE_DB) > $@
+
+%/species.txt : %/$(SPECIES_SRC)
 	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
 
 %/sixess.txt : %/R1.fq.gz

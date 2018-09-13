@@ -33,7 +33,7 @@ function exitOnFailure {
 function usage {
   msg "Name:\n  $EXE - make a BAM file from REF + R1 + R2"
   msg "Author:\n  Torsten Seemann <torsten.seemann@gmail.com>"
-  msg "Usage:\n  $EXE [options] <outprefix> <ref.fasta> <R1.fq.gz> [R2.fq.gz]"
+  msg "Usage:\n  $EXE [options] <outname> <ref.fasta> <R1.fq.gz> [R2.fq.gz]"
   msg "Parameters:"
   msg "  <outname>   Write BAM results to outname.bam[.bai]"
   msg "  <ref.fasta> FASTA reference genome"
@@ -100,11 +100,13 @@ else
   [ ! -r "$R2" ] && err "Can not access R2 read file: $R2"
 fi
 
+READGROUP=$(basename $OUTNAME)
+
 msg "Reference genome: $REF"
 msg "R1: $R1"
 msg "R2: $R2"
-msg "Will use $CPUS CPU threads and $RAM RAM"
-msg "Output folder: $OUTDIR"
+msg "Will use $CPUS CPU threads and $RAM RAM per thread"
+msg "Output prefix: $OUTNAME"
 
 #............................................................................
 banner "Checking external dependencies"
@@ -121,21 +123,22 @@ done
 #............................................................................
 banner "Aligning reads"
 
-minimap2 -a -x sr -t "$CPUS" -R "@RG\\tID:$OUTNAME\\tSM:$OUTNAME" "$REF" "$R1" "$R2" \
+# we don't quote "$R2" here because if it is not provided, it will pass an empty string
+
+#minimap2 -a -x sr -t "$CPUS" -R "@RG\\tID:$OUTNAME\\tSM:$OUTNAME" "$REF" "$R1" $R2 \
+minimap2 -a -x sr -t "$CPUS" "$REF" "$R1" $R2 \
   | samtools sort -n -m "$RAM" -@ "$CPUS" -T "$TDIR" \
   | samtools fixmate -m - - \
   | samtools sort -m "$RAM" -@ "$CPUS" -T "$TDIR" \
   | samtools markdup -T "$TDIR" -r -s - - \
   > "$OUTNAME"
 
-exitOnFailure $? "b / samtools"
+exitOnFailure $? "minimap2 / samtools"
 
 #............................................................................
 banner "Indexing BAM file"
 
 samtools index "$OUTNAME"
-
-#............................................................................
 
 #............................................................................
 banner "Summarising results"
@@ -144,5 +147,5 @@ samtools flagstat "$OUTNAME"
 
 #............................................................................
 banner "Finished"
-ls -ls "$OUTNAME" "$OUTNAME.bai"
 
+ls -ls "$OUTNAME" "${OUTNAME}.bai"

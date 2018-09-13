@@ -34,5 +34,6 @@ RESULT=${RESULT: : -1}
 
 CPUS=$(getconf _NPROCESSORS_ONLN)
 
-echo "iqtree $RESULT -m GTR+G4 -fast -ntmax "$CPUS" -nt AUTO -st DNA -s core.aln"
+echo "iqtree $RESULT -m GTR+G4 -bb 1000 -alrt 1000 -ntmax "$CPUS" -nt AUTO -st DNA -s core.aln"
+
 
