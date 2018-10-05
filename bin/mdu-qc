@@ -261,6 +261,7 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 %/skesa.fa : %/R1.fq.gz %/R2.fq.gz
 	skesa --cores $(CPUS) --use_paired_ends \
 	--gz --fastq $(word 1,$^),$(word 2,$^) \
+	--vector_percent 1 \
 	--contigs_out $@
 
 %/shovill-skesa.fa : %/R1.fq.gz %/R2.fq.gz
