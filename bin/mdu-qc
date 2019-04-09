@@ -187,6 +187,7 @@ info :
 shovill : $(addsuffix /shovill.fa,$(ISOLATES))
 spades : $(addsuffix /spades.fa,$(ISOLATES))
 skesa : $(addsuffix /skesa.fa,$(ISOLATES))
+rapidasm : $(addsuffix /rapidasm.fa,$(ISOLATES))
 
 mlst : $(addsuffix /mlst.tab,$(ISOLATES))
 yield : $(addsuffix /yield.tab,$(ISOLATES))
@@ -259,10 +260,21 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	rm -fr $(TMP)
 	
 %/skesa.fa : %/R1.fq.gz %/R2.fq.gz
-	skesa --cores $(CPUS) --use_paired_ends \
-	--gz --fastq $(word 1,$^),$(word 2,$^) \
+	skesa --cores $(CPUS) \
+	--fastq $(word 1,$^),$(word 2,$^) \
 	--vector_percent 1 \
 	--contigs_out $@
+
+%/rapidasm.fa : %/R1.fq.gz %/R2.fq.gz
+	skesa \
+	--cores $(CPUS) \
+	--fastq $(word 1,$^) \
+	--fastq $(word 2,$^) \
+	--vector_percent 1 \
+	--kmer 51 \
+	--steps 1 \
+	--contigs_out $@ \
+	2>&1 | tee $(basename $@).log 
 
 %/shovill-skesa.fa : %/R1.fq.gz %/R2.fq.gz
 	$(eval TMP := $(shell mktemp -d))
@@ -305,7 +317,7 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	seqtk fqchk $< > $@
 
 %/sketch.msh : %/R1.fq.gz %/R2.fq.gz
-	mash sketch -p $(CPUS) -o $(basename $@) -m 3 -r <(cat $^)
+	mash sketch -I $(@D) -C $< -o $(basename $@) -s 10000 -m 5 -r $<
 
 %/kraken.tab : %/R1.fq.gz %/R2.fq.gz
 	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ \
