@@ -32,8 +32,10 @@ done
 # remove last comma
 RESULT=${RESULT: : -1}
 
-CPUS=$(getconf _NPROCESSORS_ONLN)
+# iqtree craps out when -ntmax is high
+#CPUS=$(getconf _NPROCESSORS_ONLN)
+CPUS=4
 
-echo "iqtree $RESULT -m GTR+G4 -bb 1000 -alrt 1000 -ntmax "$CPUS" -nt AUTO -st DNA -s core.aln"
+echo "iqtree $RESULT -m GTR+G4 -bb 1000 -alrt 1000 -redo -ntmax "$CPUS" -nt AUTO -st DNA -s core.aln"
 
 
