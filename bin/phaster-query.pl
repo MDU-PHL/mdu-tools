@@ -47,7 +47,12 @@ while ($json =~ m/\b(\d+)-(\d+)\b/g) {
   print join("\t", $acc, $1 - 1, $2),"\n";
   $count++;
 }
-msg("Found $count phage regions in $acc");
+if ($count > 0) {
+  msg("Found $count phage regions in $acc");
+}
+else {
+  msg("Could not retrieve $acc - must not be in the Phaster database yet.");
+}
 
 __DATA__
 
