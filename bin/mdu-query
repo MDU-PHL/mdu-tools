@@ -40,7 +40,7 @@ Options:
   --help	This help
   --verbose	Extra debugging output ($verbose)
   --count       Just print count of matching isolates
-  --cols        Show the available colums
+  --columns     Show the available columns
   --csv	        Write CSV instead of TSV/TAB
   --db FILE     CSV of isolate data ($db_file)
   --or          Do logical OR instead of AND
