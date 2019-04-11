@@ -131,6 +131,10 @@ for my $name (@ID) {
     next;
   }
   elsif (@reads != 2) {
+    my $counter=0;
+    for my $f (@reads) {
+      msg("[",++$counter,"] $f");
+    }
     $blurt->("Reads found for $name, but not a single pair R1/R2");
     next;
   }
