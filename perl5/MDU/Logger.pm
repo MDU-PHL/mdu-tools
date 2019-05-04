@@ -19,8 +19,9 @@ sub msg {
   return if $quiet;
 #  my($pkg,undef,$line) = caller(1);
 #  print STDERR "[$pkg:$line] @_\n";
-  my $t = localtime;
-  print STDERR "[$t] @_\n";
+#  my $t = localtime;
+#  print STDERR "[$t] @_\n";
+  print STDERR "@_\n";
 }
       
 #----------------------------------------------------------------------
