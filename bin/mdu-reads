@@ -133,10 +133,12 @@ for my $name (@ID) {
   elsif (@reads != 2) {
     my $counter=0;
     for my $f (@reads) {
-      msg("[",++$counter,"] $f");
+      msg("[$counter] $f");
+      $counter++;
     }
     $blurt->("Reads found for $name, but not a single pair R1/R2");
-    next;
+    msg("Will use last 2 files as R1/R2");
+    @reads = ($reads[-2], $reads[-1]);
   }
   $seen{$id}++ and do { $blurt->("Duplicate ID: $id (from $name)"); next };
   my $line = $fmt;
