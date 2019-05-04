@@ -1,0 +1,7 @@
+#!/bin/bash
+
+for G in $(pbis list-groups-for-user $USER | cut -d ' ' -f6 | grep ^5266 | egrep -v '^(5266gg|5266gl-rs)$' ); do
+	echo "### $G ###"
+	pbis enum-members $G | grep SAM | sed 's/^.*: / /' | sort | nl
+	echo
+done
