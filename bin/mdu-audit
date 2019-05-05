@@ -1,154 +1,69 @@
 #!/usr/bin/env perl
 use strict;
-use warnings;
 
 #-------------------------------------------------------------------
 # libraries
 
 use Data::Dumper;
-use Getopt::Long;
 use FindBin;
 use lib "$FindBin::RealBin/../perl5";
 use MDU;
 use MDU::Logger qw(msg err);
-use Path::Tiny;
-use Cwd 'realpath';
+#use Path::Tiny;
+#use Cwd 'realpath';
 
 #-------------------------------------------------------------------
-# globals
 
-my @ASM_PREF = (qw'shovill.fa spades-fast.fa spades.fa skesa.fa');
-my $RM = "rm -fv";
-my $CP = "cp -fv";
-my $MIN_ASM_SIZE = 1000;
+my %f;
+my %id;
 
-#-------------------------------------------------------------------
-# command line
-
-my $verbose = 0;
-my $quiet   = 0;
-my $minsize = 30; # Megabytes
-my $idfile  = '';
-my $nosort  = 0;
-my $rootdir = $MDU::MDUDIR . "/../QC";
-
-sub usage {
-  my $EXE = $FindBin::RealScript;
-  print <<"USAGE";
-Synopsis:
-  Examine MDU QC for inconsistencies and suggest fixes
-Usage: 
-  $EXE [options] { --idfile IDS.txt | ID1 ID2 ... IDn }
-Options:
-  --help	This help
-  --verbose	Extra debugging output
-  --quiet	No screen output
-  --idfile      File of IDs to check
-  --nosort      Don't sort IDs
-  --rootdir     MDU data root directory
-  --minsize XX	Minimum file size in MB to accept ($minsize)
-USAGE
-  exit;
+my $readsdir = $MDU::MDUDIR;
+msg("Scanning reads in $readsdir ...");
+my $cmd = qq{find $readsdir -type f -name '*q.gz' -printf "%TY%Tm%Td\t%k\t%h\t%f\n"};
+open my $READS, '-|', $cmd;
+while (<$READS>) {
+#  print;
+  chomp;
+  my($date,$size,$path,$fname) = split m/\t/;
+  push @{$f{$path}}, "$path/$fname # $date $size";
+  my $mduid = $path;
+  $mduid =~ s{^.*/}{};
+  $id{$mduid}++;
 }
-
-GetOptions(
-  "help"      => \&usage,
-  "verbose"   => \$verbose,
-  "quiet"     => \$quiet,
-  "minsize=i" => \$minsize,
-  "idfile=s"  => \$idfile,
-  "nosort!"   => \$nosort,
-  "rootdir=s" => \$rootdir,
-) 
-or usage();
-
-$rootdir or err("--rootdir is empty");
--d $rootdir or err("Bad --rootdir $rootdir");
-$rootdir = realpath($rootdir);
-
-MDU::Logger->quiet($quiet);
-
-#-------------------------------------------------------------------
-# get IDS
-
-msg("Using data from: $rootdir");
-
-my @ID;
-if ($idfile) {
-  -r $idfile or err("Can't read --idfile $idfile");
-  @ID = path($idfile)->lines( { chomp=>1 } );
-}
-elsif (@ARGV) {
-  @ID = @ARGV;
-}
-else {
-  @ID = MDU->all_ids();
-}
-@ID = reverse sort @ID unless $nosort;
-my $N = scalar(@ID);
-msg("Considering $N isolates.");
-
-#-------------------------------------------------------------------
-# check each isolate ID
-
-my($count,$ok,$broken,$fixed) = (0,0,0,0);
-my %seen;
-
-for my $id (@ID) 
-{
-  next unless $id;
-  next if $id =~ m/^#/;
-  next if $seen{$id}++;
-  
-  my $ctg = "$rootdir/$id/contigs.fa";
-  msg("Examining: $id => $ctg") if $verbose;
-
-  if (! -d "$rootdir/../READS/$id") {
-    print "$RM -r '$rootdir/$id'  # no reads anymore\n";
-    next;
+msg("Found", scalar(keys %f), "samples");
+msg("Checking for duplicates...");
+my $dupe=0;
+for my $folder (keys %f) {
+  my $files = $f{$folder};
+  if (scalar(@$files) != 2) {
+     $dupe++;
+     print "#\n# [$dupe] $folder\n#\n";
+     for my $fq (@$files) {
+       print "# rm -fv $fq\n";
+     }
+     print "\n";
   }
+}
+msg("Found $dupe folders with duplicate read sets.");
 
-  if (-r $ctg) {
-    if (-s $ctg <= $MIN_ASM_SIZE) {
-      print "$RM '$ctg' # less than $MIN_ASM_SIZE\n";
-      $broken++;
-    }
-    else {
-      #print "# OK - $ctg\n";
-      $ok++; 
-    }
+my $qcdir = $readsdir;
+$qcdir =~ s/READS/QC/;
+msg("Scanning QC dir: $qcdir");
+my $gone=0;
+$cmd = "ls -1f $qcdir/";
+open my $QC, '-|', $cmd;
+while (<$QC>) {
+#  print;
+  chomp;
+  if (not exists $id{$_} and -d "$qcdir/$_" and !m/^\./) {
+    $gone++;
+    print "# rm -frv $qcdir/$_\n";
   }
-  else {
-    my $found=0;
-    for my $asm (@ASM_PREF) {
-      my $src = "$rootdir/$id/$asm";
-      if (-s $src) {
-        print "seqtk rename '$src' $id. > '$ctg' # recovering\n";
-        $found=1;
-        $fixed++;
-        last;
-      }
-    }
-    print "make -C $rootdir CPUS=72 $id/contigs.fa # no contigs at all\n" unless $found;
-    $fixed++;
-  }
-  
-  my $prokka = "$rootdir/$id/prokka.gff";
-  if (! -r $prokka) {
-    print "make -C $rootdir CPUS=18 $id/prokka.gff \# no annotation prokka\n";
-  } 
+}
+msg("Found $gone redundant QC folders");
 
-  $count++;
-}  
-msg("Processed=$count/$N isolates; $ok ok, $broken not fixed, $fixed fixed.");
-
-#  my @reads = MDU->reads($id);
-#  err("$id - need to fix read files:", MDU->dir($id)) unless @reads==2;
-#  my @sizes = map { int( (-s $_)/1E6 ) } @reads;
-#  for my $i (0 .. $#reads) {
-#    err("$id - read file $reads[$i] too small: $sizes[$i] < $minsize MB") if $sizes[$i] < $minsize;
-#  }
-#  print join("\t", $id, @sizes, @reads),"\n";
+msg("Done.");
+#print Dumper(\%id);
 
 #-------------------------------------------------------------------
 
