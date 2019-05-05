@@ -1,0 +1,92 @@
+#!/usr/bin/env perl
+use strict;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+use List::MoreUtils qw(zip);
+#use Path::Tiny;
+#use Cwd 'realpath';
+
+#-------------------------------------------------------------------
+
+my %f;
+my %id;
+
+my $qc = $MDU::MDUDIR;
+$qc =~ s/READS/QC/;
+$qc .= "/QC.tab";
+-r $qc or err("Could not open file '$qc'");
+msg("Loading: $qc.");
+
+my %qc;
+my @hdr;
+open my $QC, '<', $qc;
+while (<$QC>) {
+ chomp;
+ my @col = split m/\t/;
+ if (@hdr) {
+   $qc{ $col[0] } = { zip @hdr, @col }
+ }
+ else {
+   @hdr = @col;
+ }
+}
+
+msg("Loaded", scalar(keys %qc), "samples from $qc");
+#print Dumper(\%qc);
+
+# GENOME_SIZE YIELD CONTIGS#
+
+msg("Aggregating species stats");
+my %bug;
+my @bad;
+for my $id (keys %qc) {
+  my $s = $qc{$id};
+  $s->{DEPTH} = int( $s->{YIELD} / $s->{GENOME_SIZE} );
+  push @{$bug{ $s->{SPECIES} }}, $s->{DEPTH};
+  #push @bad, $s if $s->{DEPTH} < 20;
+  push @bad, $s if $s->{CONTIGS} >= 1000;  
+}
+
+print Dumper(\@bad);
+
+msg("Done.");
+
+#-------------------------------------------------------------------
+
+__DATA__
+
+
+
+ 1  ISOLATE          0100108
+ 2  SPECIES          Escherichia coli
+ 3  SCHEME           ecoli
+ 4  ST               11
+ 5  SEROTYPE
+ 6  MLST_ALLELES     adk(12);fumC(12);gyrB(8);icd(
+ 7  AMR_GENES        blaEC-15;tet(34)
+ 8  VIRULENCE_GENES  algW;aslA;cesAB;cesD;cesD2;ce
+ 9  GENOME_SIZE      5566535
+10  CONTIGS          1122
+11  NUM_CDS          4953
+12  NUM_RRNA         6
+13  NUM_TRNA         83
+14  INSTRUMENT       NS500345
+15  FLOWCELL         HJJYYAFXX
+16  QVALUES          6
+17  READS            3034294
+18  YIELD            446462400
+19  AVGQUAL          31.1
+20  MINLEN           35
+21  AVGLEN           147
+22  MODELEN          151
+23  MAXLEN           151
+24  GEECEE           49.0
+#25  DEPTH            80
+
