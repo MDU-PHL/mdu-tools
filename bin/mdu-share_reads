@@ -1,0 +1,114 @@
+#!/usr/bin/env perl
+use strict;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+use File::Path qw(make_path remove_tree);
+use Digest::MD5 qw(md5 md5_hex md5_base64);;
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $user = $ENV{USER};
+my $www = 'https://bioinformatics.mdu.unimelb.edu.au';
+my $name = 'AUTO';
+my $dir = $ENV{HOME}.'/public_html';
+my $secure = 0;
+my $fastq = '/home/seq/MDU/READS';
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"_HELP_";
+SYNOPSIS
+  Prepare a web folder to share MDU FASTQ data
+USAGE
+  $EXE [options] <isolates.tab>
+OPTIONS
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --user USER   User account to publish as ($user)
+  --dir USER    Private local folder ($dir)
+  --name NAME   Folder name ($name)
+  --www URL     Public facing website URL ($www)
+  --fastq DIR   Where to look for FASTQ files ($fastq)
+  --secure      Add user/password via .htaccess ($secure)
+INPUT FORMAT
+  The <isolates.tab> should be TSV format:
+    <MDU_ID> <TAB> <AUSMDU_ID> <NEWLINE>
+  Or if you want to use the native ID:
+    <MDU_ID> <NEWLINE>
+    <MDU_ID> <TAB> <NEWLINE>
+
+_HELP_
+  exit;
+}
+
+GetOptions(
+  "help"      => \&usage,
+  "verbose"   => \$verbose,
+  "user=s"    => \$user,
+  "name=s"    => \$name,
+  "www=s"     => \$www,
+  "dir=s"     => \$dir,
+  "fastq=s"   => \$fastq,
+  "secure!"   => \$secure,
+) 
+or usage();
+
+#-------------------------------------------------------------------
+# main script
+
+@ARGV or usage();
+
+# load isolates.tab
+msg("Loading: @ARGV");
+my %map;
+while (<ARGV>) {
+  chomp;
+  my($mdu,$new) = split m/\t/;
+  next unless $mdu and $mdu =~ m/^\d+/;
+  $new ||= $mdu;  # if no alternate ID, publish as-is
+  $map{$mdu} = $new;
+}
+msg("Loaded", scalar(keys %map), "IDs");
+
+# Set up a folder to put stuff into
+if (!$name or $name eq 'AUTO') {
+  $name = md5_hex( join('', keys %map) );
+}
+$name = "tmp/$name";
+msg("Using name:", $name);
+
+msg( Dumper(\%map) ) if $verbose;
+
+my $dest = "$dir/$name";
+msg("Making folder: $dest");
+make_path($dest, 1); # or err("Problem making folder '$dest'");
+
+open my $WGET, '>', "$dest/download_reads.sh";
+for my $mdu (sort keys %map) {
+  msg("Processing: $mdu =>",$map{$mdu});
+  for my $R (1, 2) {
+    my($fq) = <"$fastq/$mdu/*_R${R}*q.gz">;
+    -r $fq or err("Can't read file: $fq");
+    my $new = $map{$mdu}."_R$R.fq.gz";
+    print $WGET "wget --continue $www/~$user/$name/$new\n";
+    unlink "$dest/$new";
+    symlink $fq, "$dest/$new" or err("Could not symlink: $mdu => $new\n$fq => $dest/$new");
+  }
+}
+close $WGET;
+
+msg("Done.");
+msg("You can download your reads by doing this:");
+msg("curl $www/~$user/$name/download_reads.sh | bash");
+
+#-------------------------------------------------------------------
