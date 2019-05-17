@@ -34,6 +34,7 @@ my %template = (
   'bowtie'      => "-1 %1 -2 %2",
   'pear'        => "-f %1 -r %2",
   'kraken'      => "kraken --preload --paired %1 %2 | kraken-report > %i.kraken.tab\n",
+  'kraken2'     => "kraken2 --memory-mapping --output - --report %i.kraken2.tab --paired %1 %2\n",
   'symlink'     => "ln -s %1 %i_R1.fq.gz ; ln -s %2 %i_R2.fq.gz\n",
   'dirlink'     => "mkdir %i && ln -s %1 %i/R1.fq.gz && ln -s %2 %i/R2.fq.gz\n",
 );
