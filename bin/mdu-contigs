@@ -1,0 +1,104 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+use Cwd qw(abs_path);
+
+# consts
+
+my @ASM = qw(contigs shovill spades spades-fast skesa megahit);
+
+# command line
+
+my $verbose = 0;
+my $assembler = 'AUTO';
+my $idfile = '';
+my $quiet   = 0;
+my $rootdir = abs_path( $MDU::MDUDIR . "/../QC" );
+my $skip = 0;
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"USAGE";
+Synopsis:
+  Retrieve path to genome assembly FASTA file from MDU QC
+Usage: 
+  $EXE [options] [--assembler XXX] <ID1> [<ID2> ...]
+  $EXE [options] [--assembler XXX] --idfile <file_of_IDs.txt>
+Options:
+  --help	This help
+  --verbose	Extra debugging output
+  --quiet	No screen output
+  --assembler	Assembler (DEFAULT=$assembler)
+                AUTO tries [@ASM]
+  --rootdir     Folder where reads are contained (DEFAULT=$rootdir)
+  --idfile      File of IDs to use
+  --skip        Skip over missing isolates, don't quit with error
+USAGE
+  exit;
+}
+
+GetOptions(
+  "help"        => \&usage,
+  "verbose"     => \$verbose,
+  "quiet"       => \$quiet,
+  "assembler=s" => \$assembler,
+  "idfile=s"    => \$idfile,
+  "rootdir=s"   => \$rootdir,
+  "skip"        => \$skip,
+) 
+or usage();
+
+MDU::Logger->quiet($quiet);
+
+#-------------------------------------------------------------------
+# main script
+
+my @ID;
+
+if ($idfile) {
+  open IDFILE, '<', $idfile or err("Could not read --idfile $idfile");
+  @ID = <IDFILE>; # slurp all lines
+  chomp @ID;
+}
+else {
+  @ID = @ARGV;
+}
+
+@ID or err("No sample IDs provided!");
+
+# use specified assembler if not AUTO
+if ($assembler and $assembler ne 'AUTO') {
+  @ASM = ($assembler);
+  msg("Using user specified assembler only: @ASM");
+}
+
+my %seen;
+
+my $blurt = $skip ? \&msg : \&err;
+
+for my $name (@ID) {
+  my $id = MDU->id($name) or do { $blurt->("Invalid ID: $name"); next };
+  my $fa;
+  for my $asm (@ASM) {
+    $fa = "$rootdir/$name/$asm.fa";
+    last if -r $fa;
+  }
+  $fa or do { $blurt->("No contigs found for $name"); next };
+  $seen{$id}++ and do { $blurt->("Duplicate ID: $id (from $name)"); next };
+  print "$fa\n";;
+}
+
+#-------------------------------------------------------------------
+
+
+
