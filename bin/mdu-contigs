@@ -93,7 +93,7 @@ for my $name (@ID) {
     $fa = "$rootdir/$name/$asm.fa";
     last if -r $fa;
   }
-  $fa or do { $blurt->("No contigs found for $name"); next };
+  -r $fa or do { $blurt->("No contigs found for $name"); next };
   $seen{$id}++ and do { $blurt->("Duplicate ID: $id (from $name)"); next };
   print "$fa\n";;
 }
