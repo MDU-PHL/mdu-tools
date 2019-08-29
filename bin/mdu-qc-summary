@@ -1,0 +1,130 @@
+#!/usr/bin/env perl
+use strict;
+
+#-------------------------------------------------------------------
+# libraries
+
+use Data::Dumper;
+use Getopt::Long;
+use FindBin;
+use lib "$FindBin::RealBin/../perl5";
+use MDU;
+use MDU::Logger qw(msg err);
+
+#-------------------------------------------------------------------
+# command line
+
+my $verbose = 0;
+my $qctab = '/home/seq/MDU/QC/QC.tab';
+
+sub usage {
+  my $EXE = $FindBin::RealScript;
+  print <<"_HELP_";
+SYNOPSIS
+  Prepare a web report summarizing all MDU QC data
+USAGE
+  $EXE [options]
+OPTIONS
+  --help	This help
+  --verbose	Extra debugging output ($verbose)
+  --qctab FILE  MDU QC table ($qctab)
+
+_HELP_
+  exit;
+}
+
+GetOptions(
+  "help"      => \&usage,
+  "verbose"   => \$verbose,
+  "qctab=s"   => \$qctab,
+) 
+or usage();
+
+#-------------------------------------------------------------------
+# main script
+
+$qctab or err("Please provide --qctab");
+-r $qctab or err("Could not read --qctab '$qctab'");
+
+msg("Loading: $qctab");
+my $d = load_tsv($qctab);
+msg("Loaded", scalar keys %$d, "isolates");
+print Dumper($d) if $verbose;
+
+# species
+my %sp;
+for my $id (keys %$d) {
+  $sp{ $d->{$id}{SPECIES} }++;
+}
+
+#-------------------------------------------------------------------
+
+sub render_table_section {
+  my($title, $table, $header) = @_;
+  my $html = "<h2>$title</h2>\n";
+  if ($table) {
+    $html .= "<table>\n";
+    $html .= table_row($header, 'th') if $header;
+    for my $row (@$table) {
+      $html .= table_row($row);
+    }
+    $html .= "</table>\n";
+  }
+}
+
+sub table_row {
+  my($row, $cell) = @_;
+  $cell ||= 'td';
+  return "<tr>\n".join("", map { "<$cell>$_" } @$row);
+
+#-------------------------------------------------------------------
+
+sub load_tsv {
+  my($fname, $keycol) = @_;
+  $keycol=0 if not defined $keycol;
+  my $hash;
+  my @hdr;
+  open my $TSV, '<', $fname;
+  while (<$TSV>) {
+    chomp;
+    my @row = split m/\t/;
+    if (@hdr) {
+      my $dict = { map { $hdr[$_] => $row[$_] } (0 .. $#row) }; 
+      $hash->{ $row[$keycol] } = $dict;
+    }
+    else {
+      @hdr = @row;
+    }
+  }
+  return $hash;
+}
+
+#-------------------------------------------------------------------
+
+__DATA__
+
+1   ISOLATE          0100108
+2   SPECIES          Escherichia
+3   SCHEME           ecoli
+4   ST               11
+5   SEROTYPE
+6   MLST_ALLELES     adk(12);fumC(12);gyrB(8);icd(12);mdh(15
+7   AMR_GENES        blaEC-15;tet(34)
+8   VIRULENCE_GENES  algW;aslA;cesAB;cesD;cesD2;cesF;cesL;ce
+9   GENOME_SIZE      5566535
+10  CONTIGS          1122
+11  NUM_CDS          4953
+12  NUM_RRNA         6
+13  NUM_TRNA         83
+14  INSTRUMENT       NS500345
+15  FLOWCELL         HJJYYAFXX
+16  QVALUES          6
+17  READS            3034294
+18  YIELD            446462400
+19  AVGQUAL          31.1
+20  MINLEN           35
+21  AVGLEN           147
+22  MODELEN          151
+23  MAXLEN           151
+24  GEECEE           49.0
+
