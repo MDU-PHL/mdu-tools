@@ -126,7 +126,7 @@ banner "Aligning reads"
 # we don't quote "$R2" here because if it is not provided, it will pass an empty string
 
 #minimap2 -a -x sr -t "$CPUS" -R "@RG\\tID:$OUTNAME\\tSM:$OUTNAME" "$REF" "$R1" $R2 \
-minimap2 -a -x sr -t "$CPUS" "$REF" "$R1" $R2 \
+minimap2 -a -x sr -t "$CPUS" "$REF" "$R1" "$R2" \
   | samtools sort -n -m "$RAM" -@ "$CPUS" -T "$TDIR" \
   | samtools fixmate -m - - \
   | samtools sort -m "$RAM" -@ "$CPUS" -T "$TDIR" \
