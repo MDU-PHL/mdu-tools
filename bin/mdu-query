@@ -7,6 +7,7 @@ use warnings;
 
 use Data::Dumper;
 use Getopt::Long;
+use Cwd 'abs_path';
 use FindBin;
 use lib "$FindBin::RealBin/../perl5";
 use MDU;
@@ -17,12 +18,13 @@ use List::Util qw(sum max);
 # command line
 
 my $verbose = 0;
-my $db_file = $MDU::MDUDIR."/../QC/QC.tab";
+my $db_file = abs_path( $MDU::MDUDIR."/../QC/QC.tab" );
 my $logical_or = 0;
 my $csv = 0;
 my $count = 0;
 my $columns = 0;
-my($species, $scheme, $seqtype, $isolate, $date, $amr, $sero, $allele, $depth, $year);
+my($species, $scheme, $seqtype, $isolate, $date, 
+   $amr, $abx, $sero, $allele, $depth, $year);
 
 # special case if no arguments, dump whole DB
 if (@ARGV == 0) {
@@ -50,6 +52,7 @@ Options:
   --scheme  P   Match SCHEME
   --id      P   Match ISOLATE
   --amr     G   Match AMR_GENES
+  --abx     G   Match AMR_RESISTANCE (antiobiotics)
   --sero    G   Match SEROTYPE
   --depth   D   Has DEPTH less than D
   --year    Y   ISOLATE name starts with Y
@@ -69,6 +72,7 @@ GetOptions(
   "id=s"      => \$isolate,
   "year=i"    => \$year,
   "amr=s"     => \$amr,
+  "abx=s"     => \$abx,
   "sero=s"    => \$sero,
   "allele=s"  => \$allele,
   "depth=i"    => \$depth,
@@ -115,7 +119,7 @@ msg("Read", scalar(keys %db), "isolates.");
 my $pass = sum( 
   map { $_ ? 1 : 0 } 
     ($species, $seqtype, $sero, $scheme, $isolate, 
-     $amr, $allele, $depth, $year)
+     $amr, $abx, $allele, $depth, $year)
 );
 $pass = 1 if $logical_or and $pass >= 1;
 $pass ||= 1E9;
@@ -129,6 +133,7 @@ for my $id (keys %db) {
   $score++ if $isolate and $db{$id}{ISOLATE}       =~ m/$isolate/i;
   $score++ if $date    and $db{$id}{ANALYSIS_DATE} =~ m/$date/;
   $score++ if $amr     and $db{$id}{AMR_GENES}     =~ m/$amr/i;
+  $score++ if $abx     and $db{$id}{AMR_RESISTANCE} =~ m/$abx/i;
   $score++ if $sero    and $db{$id}{SEROTYPE}      =~ m/$sero/i;
   $score++ if $depth   and $db{$id}{DEPTH} < $depth;
   $score++ if $year    and $db{$id}{ISOLATE} =~ m/^$year/;

@@ -20,8 +20,8 @@ use List::Util qw(uniqstr);
 #-------------------------------------------------------------------
 
 my @COLS = qw(
-  ISOLATE SPECIES SCHEME ST SEROTYPE MLST_ALLELES
-  AMR_GENES VIRULENCE_GENES
+  ISOLATE SPECIES SPECIES_GTDB SCHEME ST SEROTYPE MLST_ALLELES
+  AMR_GENES AMR_RESISTANCE VIRULENCE_GENES
   GENOME_SIZE CONTIGS NUM_CDS NUM_RRNA NUM_TRNA
   INSTRUMENT FLOWCELL QVALUES
   READS YIELD AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
@@ -109,6 +109,10 @@ sub process_id {
   chomp $gs;
   $row{'SPECIES'} = $gs;
 
+  my($gtdb) = qx(cat $prefix/species_gtdb.txt);
+  chomp $gtdb;
+  $row{'SPECIES_GTDB'} = $gtdb;
+
   open MLST, '<', "$prefix/mlst.tab";
   my(undef, @mlst) = split m/\t/, scalar(<MLST>);
   chomp @mlst;
@@ -126,10 +130,15 @@ sub process_id {
   delete $row{FILES};
   close YIELD;
   
-  my(@amr) = qx(cut -f 5 $prefix/resistome.tab);
+  # FIXME: use col name
+  my(@amr) = qx(cut -f 6 $prefix/resistome.tab);
   $row{AMR_GENES} = list_to_cell(@amr);
 
-  my(@vir) = qx(cut -f 5 $prefix/virulome.tab);
+  # FIXME: use col name
+  my(@res) = qx(cut -f 15 $prefix/resistome.tab);
+  $row{AMR_RESISTANCE} = list_to_cell(@res);
+
+  my(@vir) = qx(cut -f 6 $prefix/virulome.tab);
   $row{VIRULENCE_GENES} = list_to_cell(@vir);
 
   $row{CONTIGS} = qx(grep -c '>' $prefix/contigs.fa);

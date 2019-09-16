@@ -149,6 +149,7 @@ SORT := LC_ALL=C sort --parallel=$(CPUS) --buffer-size=4G
 
 KRAKEN_DB := /home/linuxbrew/db/kraken/minikraken
 KRAKEN2_DB := /home/linuxbrew/db/kraken2/microbe
+KRAKEN2_GTDB := /home/linuxbrew/db/kraken2/gtdb
 CENTRIFUGE_DB := /bio/db/centrifuge/bacvirhum/p_compressed+h+v
 AMR_DB := ncbi
 AMR_SEQ := /home/tseemann/git/abricate/db/$(AMR_DB)/sequences
@@ -157,13 +158,14 @@ VIR_SEQ := /home/tseemann/git/abricate/db/$(VIR_DB)/sequences
 MLST_SEQ := /home/tseemann/git/mlst/db/blast/mlst.fa
 SIXESS_DB := SILVA.gz
 SPECIES_SRC := kraken2.tab
+SPECIES_GTDB_SRC := gtdb.tab
 ASSEMBLER := shovill
 
 ISOLATES := $(shell cat $(IDFILE))
 
 COMMANDS := contigs shovill skesa \
 	    mlst yield resistome abricate virulome \
-            sketch kraken species prokka stats qc
+            sketch kraken gtdb species species_gtdb prokka stats qc
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
@@ -197,8 +199,10 @@ virulome : $(addsuffix /virulome.tab,$(ISOLATES))
 sketch : $(addsuffix /sketch.msh,$(ISOLATES))
 #kraken : $(addsuffix /kraken.tab,$(ISOLATES))
 kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
+gtdb : $(addsuffix /gtdb.tab,$(ISOLATES))
 #centrifuge : $(addsuffix /centrifuge.tab,$(ISOLATES))
 species : $(addsuffix /species.txt,$(ISOLATES))
+species_gtdb : $(addsuffix /species_gtdb.txt,$(ISOLATES))
 prokka : $(addsuffix /prokka.gff,$(ISOLATES))
 stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
 qc : $(addsuffix /qc.tab,$(ISOLATES))
@@ -226,7 +230,7 @@ blastdb : mducontigs.nin
 mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
 
-%/qc.tab : %/kraken2.tab %/species.txt %/sketch.msh \
+%/qc.tab : %/species.txt %/species_gtdb.txt %/sketch.msh \
            %/yield.tab %/R1.stats.tab %/R2.stats.tab \
            %/contigs.fa %/prokka.gff \
            %/resistome.tab %/virulome.tab %/mlst.tab
@@ -327,11 +331,18 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	kraken2 --threads $(CPUS) --db $(KRAKEN2_DB) --memory-mapping \
 	--output - --report $@ --paired $^
 
+%/gtdb.tab : %/R1.fq.gz %/R2.fq.gz
+	kraken2 --threads $(CPUS) --db $(KRAKEN2_GTDB) --memory-mapping \
+	--output - --report $@ --paired $^
+
 %/centrifuge.tab : %/R1.fq.gz %/R2.fq.gz
 	centrifuge -x $(CENTRIFUGE_DB) -p $(CPUS) -1 $(word 1,$^) -2 $(word 2,$^) \
 	| centrifuge-kreport -x $(CENTRIFUGE_DB) > $@
 
 %/species.txt : %/$(SPECIES_SRC)
+	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
+
+%/species_gtdb.txt : %/$(SPECIES_GTDB_SRC)
 	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
 
 %/sixess.txt : %/R1.fq.gz

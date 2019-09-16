@@ -110,6 +110,7 @@ __DATA__
 5   SEROTYPE
 6   MLST_ALLELES     adk(12);fumC(12);gyrB(8);icd(12);mdh(15
 7   AMR_GENES        blaEC-15;tet(34)
+XXX AMR_RESISTANCE   FOSFOMYCIN
 8   VIRULENCE_GENES  algW;aslA;cesAB;cesD;cesD2;cesF;cesL;ce
 9   GENOME_SIZE      5566535
 10  CONTIGS          1122
