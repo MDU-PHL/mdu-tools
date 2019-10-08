@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -e
+QCDIR="/home/seq/MDU/QC"
+BUSY="$QCDIR/QC.tab.busy"
+if [ -r "$BUSY" ]; then
+  echo "QC already running? $BUSY exists."
+  exit 1
+else
+  echo "Running QC on $HOSTNAME"
+  mv -vf $QCDIR/QC.tab $BUSY
+  mdu-qc --scan > $QCDIR/Makefile
+  nice make -l $(nproc) -j 8 -C $QCDIR
+  rm -vf $BUSY
+  mdu-query --count
+fi
