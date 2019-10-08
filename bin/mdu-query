@@ -86,6 +86,7 @@ or usage();
 
 my %db;
 msg("Opening database: $db_file");
+$db_file or err("Database file not present: $db_file");
 open TSV, '<', $db_file;
 my $header = <TSV>;
 my(@hdr) = split m/\t/, $header;
