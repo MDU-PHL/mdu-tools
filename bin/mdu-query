@@ -86,11 +86,12 @@ or usage();
 
 my %db;
 msg("Opening database: $db_file");
-$db_file or msg("Database file not present: $db_file");
-$db_file .= ".busy";
-msg("Trying backup database: $db_file");
-$db_file or err("Backup Database file not present: $db_file");
-
+if (!-r $db_file) {
+  msg("Database file not present: $db_file");
+  $db_file .= ".busy";
+  msg("Trying backup database: $db_file");
+  $db_file or err("Backup Database file not present: $db_file");
+}
 open TSV, '<', $db_file;
 my $header = <TSV>;
 my(@hdr) = split m/\t/, $header;
@@ -119,7 +120,9 @@ while (my $line = <TSV>) {
   }
 }
 close TSV;
-msg("Read", scalar(keys %db), "isolates.");
+my $T = scalar(keys %db);
+msg("Identified $T isolates.");
+count_trivia($T) if $count;
 
 my $pass = sum( 
   map { $_ ? 1 : 0 } 
@@ -144,10 +147,18 @@ for my $id (keys %db) {
   $score++ if $year    and $db{$id}{ISOLATE} =~ m/^$year/;
   push @match, $db{$id}{LINE} if $score >= $pass;
 }
-msg("Found", 0+@match, "matches");
+my $N = scalar(@match);
+msg("Found $N matches");
 $header = tab_to_csv($header) if $csv;
-print $header, map { "$_\n" } @match if @match > 0 and !$count
-;
+print $header, map { "$_\n" } @match if $N > 0 and !$count;
+
+#-------------------------------------------------------------------
+
+sub count_trivia {
+  my($n) = @_;
+  my $k = int(($n+5000)/10000);
+  msg("That's", int($n/96), "x 96-well plates. We'll soon be at ${k}0,000 isolates!");
+}
 
 #-------------------------------------------------------------------
 
