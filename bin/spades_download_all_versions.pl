@@ -43,7 +43,8 @@ print STDERR "Making Makefile\n";
 my @ver = reverse sort { $a <=> $b } keys %ver;
 my @clean;
 
-print "ARCH=Linux # use Darwin for macOS\n\n";
+#print "ARCH=Linux # use Darwin for macOS\n\n";
+print "ARCH := Linux\n\n";
 
 print ".DELETE_ON_ERROR:\n";
 print ".PHONY: all list clean\n\n";
