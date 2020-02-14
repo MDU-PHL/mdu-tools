@@ -79,11 +79,16 @@ my %map;
 while (<ARGV>) {
   chomp;
   my($mdu,$new) = split m/\t/;
-  next unless $mdu and $mdu =~ m/^\d+/;
+  next unless $mdu and $mdu =~ m/^\d+|DMG/;
   $new ||= $mdu;  # if no alternate ID, publish as-is
   $map{$mdu} = $new;
 }
+#for my $id (@ARGV) {
+#  $map{$id} ||= $id;
+#}
 msg("Loaded", scalar(keys %map), "IDs");
+
+
 
 # Set up a folder to put stuff into
 if (!$name or $name eq 'AUTO') {
@@ -96,7 +101,9 @@ msg( Dumper(\%map) ) if $verbose;
 
 my $dest = "$dir/$name";
 msg("Making folder: $dest");
-make_path($dest, 1); # or err("Problem making folder '$dest'");
+make_path($dest); # or err("Problem making folder '$dest'");
+
+open my $HTML, '>', "$dest/index.html";
 
 open my $WGET, '>', "$dest/$SCRIPT";
 for my $mdu (sort keys %map) {
@@ -108,12 +115,16 @@ for my $mdu (sort keys %map) {
     print $WGET "wget --continue $www/~$user/$name/$new\n";
     unlink "$dest/$new";
     symlink $fq, "$dest/$new" or err("Could not symlink: $mdu => $new\n$fq => $dest/$new");
+    print $HTML "<li><a href='$new'>$new</a>\n";
   }
 }
 close $WGET;
+close $HTML;
 
 msg("Done.");
 msg("You can download your reads by doing this:");
-msg("curl $www/~$user/$name/$SCRIPT | bash");
+msg("  curl $www/~$user/$name/$SCRIPT | bash");
+msg("Or manually download from:");
+msg("  $www/~$user/$name/");
 
 #-------------------------------------------------------------------
