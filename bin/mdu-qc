@@ -161,10 +161,12 @@ SPECIES_SRC := kraken2.tab
 SPECIES_GTDB_SRC := gtdb.tab
 ASSEMBLER := shovill
 
+ABRICATE := abricate --quiet --minid 90 --mincov 90
+
 ISOLATES := $(shell cat $(IDFILE))
 
 COMMANDS := contigs shovill skesa \
-	    mlst yield resistome abricate virulome \
+	    mlst yield resistome virulome \
             sketch kraken gtdb species species_gtdb prokka stats qc
 
 .SUFFIXES:
@@ -193,7 +195,6 @@ rapidasm : $(addsuffix /rapidasm.fa,$(ISOLATES))
 
 mlst : $(addsuffix /mlst.tab,$(ISOLATES))
 yield : $(addsuffix /yield.tab,$(ISOLATES))
-abricate : $(addsuffix /abricate.tab,$(ISOLATES))
 resistome : $(addsuffix /resistome.tab,$(ISOLATES))
 virulome : $(addsuffix /virulome.tab,$(ISOLATES))
 sketch : $(addsuffix /sketch.msh,$(ISOLATES))
@@ -299,14 +300,11 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 	mv -f $(TMP)/spades.log $(basename $@).log
 	rm -fr $(TMP)
 
-%/abricate.tab : %/contigs.fa
-	abricate --quiet --db resfinder $< > $@
-
 %/resistome.tab : %/contigs.fa $(AMR_SEQ)
-	abricate --quiet --db $(AMR_DB) $< > $@
+	$(ABRICATE) --db $(AMR_DB) $< > $@
 
 %/virulome.tab : %/contigs.fa $(VIR_SEQ)
-	abricate --quiet --db $(VIR_DB) $< > $@
+	$(ABRICATE) --db $(VIR_DB) $< > $@
 
 %/mlst.tab : %/contigs.fa $(MLST_SEQ)
 	mlst --quiet $< > $@
