@@ -7,6 +7,7 @@ use strict;
 use Getopt::Std;
 use Data::Dumper;
 use File::Basename;
+use List::Util qw(uniq);
 
 my $EXE = basename($0);
 my $VERSION = 0.2;
@@ -69,14 +70,13 @@ while (<ARGV>) {
   }
 }
 
-my @char = sort keys %freq;
-print join($SEP, "SEQUENCE", "LENGTH", @char), "\n";  # header
+# FIXME - put A,T C,G, N  in front of sorted list?
+my @char = uniq(qw(A T C G N), sort keys %freq);
+print join($SEP, "ID", "LENGTH", @char), "\n";  # header
 
 for my $id (@id) {
   my @freq = map { $freq{$_}{$id} || '0' } @char;
   @freq = map { sprintf "%.3f", $_ * 100.0 / $len{$id} } @freq if $opt{'p'};
   print join($SEP, $id, $len{$id}, @freq),"\n";
 }
-
-
 
