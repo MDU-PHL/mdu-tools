@@ -105,12 +105,13 @@ while (my $line = <TSV>) {
   $line = tab_to_csv($line) if $csv;
   $db{$x[0]}{LINE} = $line;
 
+# NOW DONE IB mdu-qc-isolate_summary
   # calculated fields
-  my $rec = $db{ $x[0] };
-  push @hdr, 'DEPTH';
-  die "bad GENOME_SIZE ? ".Dumper($rec) if !defined($rec->{GENOME_SIZE}) or $rec->{GENOME_SIZE} <= 0;
-  die "bad YIELD ? ".Dumper($rec) if !defined($rec->{YIELD}) or $rec->{YIELD} <= 0;
-  $rec->{DEPTH} = int( $rec->{YIELD} / $rec->{GENOME_SIZE} );
+#  my $rec = $db{ $x[0] };
+#  push @hdr, 'DEPTH';
+#  die "bad GENOME_SIZE ? ".Dumper($rec) if !defined($rec->{GENOME_SIZE}) or $rec->{GENOME_SIZE} <= 0;
+#  die "bad YIELD ? ".Dumper($rec) if !defined($rec->{YIELD}) or $rec->{YIELD} <= 0;
+#  $rec->{DEPTH} = int( $rec->{YIELD} / $rec->{GENOME_SIZE} );
 
   if ($columns) {
     my $c = 1;
