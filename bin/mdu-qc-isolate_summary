@@ -25,6 +25,7 @@ my @COLS = qw(
   GENOME_SIZE CONTIGS NUM_CDS NUM_RRNA NUM_TRNA
   INSTRUMENT FLOWCELL QVALUES
   READS YIELD AVGQUAL MINLEN AVGLEN MODELEN MAXLEN GEECEE 
+  DEPTH
 );
 
 #-------------------------------------------------------------------
@@ -120,7 +121,8 @@ sub process_id {
   $row{ST} = shift @mlst;
   $row{MLST_ALLELES} = @mlst ? join(';', @mlst) : '';
                      
-  open YIELD, '<', "$prefix/yield.tab";
+  # FIXME: sometimes this has DEPTH, other times NOT (legacy)
+  open YIELD, '<', "$prefix/yield.tab";  
   while (<YIELD>) {
     chomp;
     my @x = split m/\t/;
@@ -144,6 +146,11 @@ sub process_id {
   $row{CONTIGS} = qx(grep -c '>' $prefix/contigs.fa);
   chomp $row{CONTIGS};
   $row{GENOME_SIZE} = -s "$prefix/contigs.fa"; # approx
+
+  # sometimes yield.tab does not have a "Depth" entry
+  $row{DEPTH} ||= $row{YIELD} / $row{GENOME_SIZE};
+  # remove 'x' at end
+  chop $row{DEPTH} if $row{DEPTH} =~ m/x$/;
 
   $row{SEROTYPE} = $row{SCHEME} eq 'senterica' ? $sero_of{ $row{ST} } : '';
   
