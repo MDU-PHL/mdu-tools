@@ -18,7 +18,7 @@ my $f1 = IO::Uncompress::AnyUncompress->new($R1);
 my $f2 = IO::Uncompress::AnyUncompress->new($R2);
 
 my $counter=0;
-while (defined $f1) {
+while (!$f1->eof and !$f2->eof) {
   my $h1 = <$f1>;
   my $h2 = <$f2>;
   $counter++;
@@ -28,3 +28,5 @@ while (defined $f1) {
   msg("Processed $counter reads...") if $counter % 100000 == 0;
 }
 msg("Checked $counter reads.");
+$f1->eof or err("$R1 has extra reads in it");
+$f2->eof or err("$R2 has extra reads in it");
