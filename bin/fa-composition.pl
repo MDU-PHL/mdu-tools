@@ -10,7 +10,7 @@ use File::Basename;
 use List::Util qw(uniq);
 
 my $EXE = basename($0);
-my $VERSION = 0.2;
+my $VERSION = 0.4;
 
 sub VERSION_MESSAGE {
   my($fh) = @_;
@@ -30,42 +30,57 @@ sub HELP_MESSAGE {
     "  -V   Print version and exit",
     "  -c   Output in CSV instead of TSV format",
     "  -p   Print percent(%) rather than absolute count",
-    "  -g   Treat file as a single sequence; give global stats",
+    "  -f   Treat each input file as a single sequence; give per file stats",
+    "  -g   Treat inputs as a single sequence; give global stats",
+    "  -i   Case insensitive counting",
+    "  -s   Use whole > line as ID, don't stop at first space",
     "  -q   Quiet mode; don't output progess",
     "END"
   ;
 }
 
+sub err { print STDERR "ERROR: @_\n"; exit(1); }
+
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 my %opt;
-getopts('gpcqhV', \%opt);
+getopts('gpcsqhfiV', \%opt);
 
 $opt{'V'} and do { VERSION_MESSAGE(\*STDOUT); exit(0) };
 $opt{'h'} and do { HELP_MESSAGE(\*STDOUT); exit(0) };
 
 my $SEP = $opt{'c'} ? ',' : "\t";
 
+my %seen;
 my @id;
 my %len;
 my %freq;
 my $id = $ARGV[0] || 'Total';
+my $id_regex = $opt{'s'} ? qr/^>(.*)/ : qr/^>(\S+)/;
 
-while (<ARGV>) {
-  chomp;
-  if (m/^>(\S+)/) {
-    print STDERR "Counting: $1\n" unless $opt{'q'};
-    if ($opt{'g'}) {
-      push @id, $id unless @id;
+for my $argv (@ARGV) {
+  open my $FASTA, '<', $argv;
+  while (<$FASTA>) {
+    chomp;
+    if ($_ =~ $id_regex) {
+      print STDERR "Counting: $argv $1\n" unless $opt{'q'};
+      if ($opt{'g'}) {
+        push @id, $id unless @id;
+      }
+      elsif ($opt{'f'}) {
+        $id = $argv;
+      }
+      else {
+        $id = $1;
+        $seen{$id}++ >= 1 and err("Duplicate ID '$id'. Try using -s ?");
+        push @id, $id;
+      }
     }
     else {
-      $id = $1;
-      push @id, $id;
-    }
-  }
-  else {
-    for my $c (split m//, $_) {
-      $freq{$c}{$id}++;
-      $len{$id}++;
+      $_ = uc($_) if $opt{'i'};
+      for my $c (split m//, $_) {
+        $freq{$c}{$id}++;
+        $len{$id}++;
+      }
     }
   }
 }
