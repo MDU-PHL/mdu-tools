@@ -14,6 +14,7 @@ my($R1,$R2) = @ARGV;
 -r $R2 or err("Can't read R2");
 $R1 ne $R2 or err("R1 and R2 are the same file");
 
+msg("Checking $R1 vs. $R2 slowly...");
 my $f1 = IO::Uncompress::AnyUncompress->new($R1);
 my $f2 = IO::Uncompress::AnyUncompress->new($R2);
 
