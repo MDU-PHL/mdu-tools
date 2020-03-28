@@ -52,7 +52,7 @@ Options:
   --scheme  P   Match SCHEME
   --id      P   Match ISOLATE
   --amr     G   Match AMR_GENES
-  --abx     G   Match AMR_RESISTANCE (antiobiotics)
+  --abx     G   Match AMR_RESISTANCE (antibiotics)
   --sero    G   Match SEROTYPE
   --depth   D   Has DEPTH less than D
   --year    Y   ISOLATE name starts with Y
