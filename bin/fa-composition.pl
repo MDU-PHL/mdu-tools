@@ -34,6 +34,7 @@ sub HELP_MESSAGE {
     "  -g   Treat inputs as a single sequence; give global stats",
     "  -i   Case insensitive counting",
     "  -s   Use whole > line as ID, don't stop at first space",
+    "  -n   Don't print header",
     "  -q   Quiet mode; don't output progess",
     "END"
   ;
@@ -43,7 +44,7 @@ sub err { print STDERR "ERROR: @_\n"; exit(1); }
 
 $Getopt::Std::STANDARD_HELP_VERSION = 1;
 my %opt;
-getopts('gpcsqhfiV', \%opt);
+getopts('gpcsqhfinV', \%opt);
 
 $opt{'V'} and do { VERSION_MESSAGE(\*STDOUT); exit(0) };
 $opt{'h'} and do { HELP_MESSAGE(\*STDOUT); exit(0) };
@@ -87,7 +88,7 @@ for my $argv (@ARGV) {
 
 # FIXME - put A,T C,G, N  in front of sorted list?
 my @char = uniq(qw(A T C G N), sort keys %freq);
-print join($SEP, "ID", "LENGTH", @char), "\n";  # header
+print join($SEP, "ID", "LENGTH", @char), "\n" unless $opt{'n'};
 
 for my $id (@id) {
   my @freq = map { $freq{$_}{$id} || '0' } @char;

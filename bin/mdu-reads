@@ -108,6 +108,7 @@ my @ID;
 if ($idfile) {
   open IDFILE, '<', $idfile or err("Could not read --idfile $idfile");
   @ID = <IDFILE>; # slurp all lines
+  @ID = grep { ! m/^\s*#/ } @ID; # remove commented out lines
   chomp @ID;
 }
 else {
@@ -134,7 +135,7 @@ for my $name (@ID) {
   elsif (@reads != 2) {
     my $counter=0;
     for my $f (@reads) {
-      msg("[$counter] $f");
+      msg("[File $counter] $f");
       $counter++;
     }
     $blurt->("Reads found for $name, but not a single pair R1/R2");
