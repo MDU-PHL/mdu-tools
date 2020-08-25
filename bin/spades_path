@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+DIR=/home/seq/MDU/TORSTYVERSE/spades
+EXE=$(basename $0)
+VER="$1"
+
+if [ -z "$VER" ]; then
+  echo "USAGE"
+  echo "  $EXE <version>"
+  echo "VERSIONS"
+  echo -n "  "
+  ls -f "$DIR" | grep '^[1-9]' | sort -n | tr "\n" " "
+  echo
+  echo "END"
+else
+  CMD="$DIR/$VER/bin/spades.py"
+  if [ -x "$CMD" ]; then
+    echo $CMD
+    exit 0
+  else
+    >&2 echo "Version $VER not found!"
+  fi
+fi
+
