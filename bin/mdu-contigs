@@ -89,9 +89,15 @@ my $blurt = $skip ? \&msg : \&err;
 for my $name (@ID) {
   my $id = MDU->id($name) or do { $blurt->("Invalid ID: $name"); next };
   my $fa;
+  TRY:
   for my $asm (@ASM) {
-    $fa = "$rootdir/$name/$asm.fa";
-    last if -r $fa;
+    for my $ext ("fa", "fna") {
+      $fa = "$rootdir/$name/$asm.$ext";
+      msg("Trying: $fa") if $verbose;
+      #print STDERR "Trying: $fa\n";
+      #msg("Size:", (-s $fa), "bytes");
+      last TRY if -s $fa;
+    }
   }
   -r $fa or do { $blurt->("No contigs found for $name"); next };
   $seen{$id}++ and do { $blurt->("Duplicate ID: $id (from $name)"); next };
