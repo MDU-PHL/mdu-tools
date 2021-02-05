@@ -39,6 +39,7 @@ sub tsv_to_hash {
   while (<$TSV>) {
     chomp;
     my @col = split m/\t/;
+    #print STDERR Dumper(\@hdr, \@col);
     if (@hdr) {
       die "header/row mismatch" unless @col == @hdr;
       my $hash = { map { ($hdr[$_] => $col[$_]) } (0 .. $#hdr) };
@@ -47,6 +48,7 @@ sub tsv_to_hash {
     }
     else {
       @hdr = @col;
+      #print STDERR Dumper(\@hdr);
     }
   }
   return ($result, [ @hdr ]);

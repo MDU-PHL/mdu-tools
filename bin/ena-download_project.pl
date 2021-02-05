@@ -31,7 +31,7 @@ my $askey = "$aspera/etc/asperaweb_id_dsa.openssh";
 -r $askey or die "Can't see Aspera SSH key here: $askey";
 
 print STDERR "Fetching run table for $pid from ENA\n";
-my $url = "http://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=${pid}".
+my $url = "https://www.ebi.ac.uk/ena/data/warehouse/filereport?accession=${pid}".
           "&result=read_run&download=txt&fields=run_accession,sample_alias,fastq_ftp,submitted_ftp";
 print STDERR "URL: $url\n" if $verbose;
 my $content = get($url);

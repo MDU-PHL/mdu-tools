@@ -114,6 +114,10 @@ sub process_id {
   chomp $gtdb;
   $row{'SPECIES_GTDB'} = $gtdb;
 
+  my($plus) = qx(cat $prefix/species_plus.txt);
+  chomp $plus;
+  $row{'SPECIES_PLUS'} = $plus;
+
   open MLST, '<', "$prefix/mlst.tab";
   my(undef, @mlst) = split m/\t/, scalar(<MLST>);
   chomp @mlst;

@@ -1,14 +1,12 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
+
 use Cwd qw(abs_path);
-
-#-------------------------------------------------------------------
-# libraries
-
 use Data::Dumper;
 use Getopt::Long;
 use FindBin;
+
 use lib "$FindBin::RealBin/../perl5";
 use MDU;
 use MDU::Logger qw(msg err);
@@ -150,6 +148,7 @@ SORT := LC_ALL=C sort --parallel=$(CPUS) --buffer-size=4G
 KRAKEN_DB := /home/linuxbrew/db/kraken/minikraken
 KRAKEN2_DB := /home/linuxbrew/db/kraken2/microbe
 KRAKEN2_GTDB := /home/linuxbrew/db/kraken2/gtdb
+KRAKEN2_PLUS := /home/linuxbrew/db/kraken2/pluspf
 CENTRIFUGE_DB := /bio/db/centrifuge/bacvirhum/p_compressed+h+v
 AMR_DB := ncbi
 AMR_SEQ := /home/tseemann/git/abricate/db/$(AMR_DB)/sequences
@@ -159,6 +158,7 @@ MLST_SEQ := /home/tseemann/git/mlst/db/blast/mlst.fa
 SIXESS_DB := SILVA.gz
 SPECIES_SRC := kraken2.tab
 SPECIES_GTDB_SRC := gtdb.tab
+SPECIES_PLUS_SRC := plus.tab
 ASSEMBLER := shovill
 
 ABRICATE := abricate --quiet --minid 90 --mincov 90
@@ -167,14 +167,17 @@ ISOLATES := $(shell cat $(IDFILE))
 
 COMMANDS := contigs shovill skesa \
 	    mlst yield resistome virulome \
-            sketch kraken gtdb species species_gtdb prokka stats qc
+            sketch kraken gtdb \
+            species species_gtdb \
+            species_plus \
+            prokka stats qc
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
 .SECONDARY:
 .ONESHELL:
 .DEFAULT: all
-.PHONY: all info clean blastdb $(COMMANDS)
+.PHONY: all info clean clean2 clean3 blastdb $(COMMANDS)
 
 all : QC.tab
 
@@ -188,30 +191,36 @@ help :
 info :
 	echo $(ISOLATES)  | tr " " "\n" | nl
 
-shovill : $(addsuffix /shovill.fa,$(ISOLATES))
-spades : $(addsuffix /spades.fa,$(ISOLATES))
-skesa : $(addsuffix /skesa.fa,$(ISOLATES))
-rapidasm : $(addsuffix /rapidasm.fa,$(ISOLATES))
+#shovill : $(addsuffix /shovill.fa,$(ISOLATES))
+#spades : $(addsuffix /spades.fa,$(ISOLATES))
+#skesa : $(addsuffix /skesa.fa,$(ISOLATES))
+#rapidasm : $(addsuffix /rapidasm.fa,$(ISOLATES))
 
-mlst : $(addsuffix /mlst.tab,$(ISOLATES))
-yield : $(addsuffix /yield.tab,$(ISOLATES))
-resistome : $(addsuffix /resistome.tab,$(ISOLATES))
-virulome : $(addsuffix /virulome.tab,$(ISOLATES))
-sketch : $(addsuffix /sketch.msh,$(ISOLATES))
+#mlst : $(addsuffix /mlst.tab,$(ISOLATES))
+#yield : $(addsuffix /yield.tab,$(ISOLATES))
+#resistome : $(addsuffix /resistome.tab,$(ISOLATES))
+#virulome : $(addsuffix /virulome.tab,$(ISOLATES))
+#sketch : $(addsuffix /sketch.msh,$(ISOLATES))
 #kraken : $(addsuffix /kraken.tab,$(ISOLATES))
-kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
-gtdb : $(addsuffix /gtdb.tab,$(ISOLATES))
+#kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
+#gtdb : $(addsuffix /gtdb.tab,$(ISOLATES))
+plus : $(addsuffix /plus.tab,$(ISOLATES))
 #centrifuge : $(addsuffix /centrifuge.tab,$(ISOLATES))
-species : $(addsuffix /species.txt,$(ISOLATES))
-species_gtdb : $(addsuffix /species_gtdb.txt,$(ISOLATES))
-prokka : $(addsuffix /prokka.gff,$(ISOLATES))
-stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
-qc : $(addsuffix /qc.tab,$(ISOLATES))
+#species : $(addsuffix /species.txt,$(ISOLATES))
+#species_gtdb : $(addsuffix /species_gtdb.txt,$(ISOLATES))
+#species_plus : $(addsuffix /species_plus.txt,$(ISOLATES))
+#prokka : $(addsuffix /prokka.gff,$(ISOLATES))
+#stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
+#qc : $(addsuffix /qc.tab,$(ISOLATES))
 
 # remove empty files, dead symlinks, temp folders, or java bug folders
 clean :
 	find . -type f -size 0 -printf "EMPTY_FILE: %p\n" -delete
+
+clean2 :
         find . -xtype l -printf "DEAD_SYMLINK: %p\n" -delete
+
+clean3 :
 	find . -type d -name assembler -exec rm -frv {} \;
 
 FILES.tab :
@@ -226,15 +235,12 @@ QC.tab : $(addsuffix /qc.tab,$(ISOLATES))
 QC.csv : QC.tab
 	tsv_to_csv.pl < $< > $@
 
-blastdb : mducontigs.nin
+#blastdb : mducontigs.nin
 
-mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
-	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
+#mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
+#	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
 
-%/qc.tab : %/species.txt %/species_gtdb.txt %/sketch.msh \
-           %/yield.tab %/R1.stats.tab %/R2.stats.tab \
-           %/contigs.fa %/prokka.gff \
-           %/resistome.tab %/virulome.tab %/mlst.tab
+%/qc.tab: %/species.txt %/species_gtdb.txt%/species_plus.tab %/sketch.msh %/yield.tab %/R1.stats.tab %/R2.stats.tab %/contigs.fa %/prokka.gff %/resistome.tab %/virulome.tab %/mlst.tab %/skesa.fa 
 	mdu-qc-isolate_summary --quiet --header $(@D) > $@
 
 %/prokka.gff : %/contigs.fa %/species.txt
@@ -294,7 +300,7 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 
 %/spades.fa : %/R1.fq.gz %/R2.fq.gz
 	$(eval TMP := $(shell mktemp -d))
-	spades.py -t $(CPUS) -o $(TMP) -1 $(word 1,$^) -2 $(word 2,$^) --careful
+	spades.py -t $(CPUS) -o $(TMP) -1 $(word 1,$^) -2 $(word 2,$^) --isolate
 	mv -f $(TMP)/scaffolds.fasta $@
 	mv -f $(TMP)/assembly_graph_with_scaffolds.gfa $(basename $@).gfa
 	mv -f $(TMP)/spades.log $(basename $@).log
@@ -321,21 +327,31 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 %/sketch.msh : %/R1.fq.gz %/R2.fq.gz
 	mash sketch -I $(@D) -C $< -o $(basename $@) -s 10000 -m 5 -r $<
 
-%/kraken.tab : %/R1.fq.gz %/R2.fq.gz
-	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ \
-	| kraken-report --db $(KRAKEN_DB) > $@
+#%/kraken.tab : %/R1.fq.gz %/R2.fq.gz
+#	kraken --threads $(CPUS) --db $(KRAKEN_DB) --paired $^ \
+#	| kraken-report --db $(KRAKEN_DB) > $@
 
 %/kraken2.tab : %/R1.fq.gz %/R2.fq.gz
-	kraken2 --threads $(CPUS) --db $(KRAKEN2_DB) --memory-mapping \
+	kraken2 --threads $(CPUS) \
+	--db $(KRAKEN2_DB) \
+	--memory-mapping \
 	--output - --report $@ --paired $^
 
 %/gtdb.tab : %/R1.fq.gz %/R2.fq.gz
-	kraken2 --threads $(CPUS) --db $(KRAKEN2_GTDB) --memory-mapping \
+	kraken2 --threads $(CPUS) \
+	--db $(KRAKEN2_GTDB) \
+	--memory-mapping \
 	--output - --report $@ --paired $^
 
-%/centrifuge.tab : %/R1.fq.gz %/R2.fq.gz
-	centrifuge -x $(CENTRIFUGE_DB) -p $(CPUS) -1 $(word 1,$^) -2 $(word 2,$^) \
-	| centrifuge-kreport -x $(CENTRIFUGE_DB) > $@
+%/plus.tab : %/R1.fq.gz %/R2.fq.gz
+	kraken2 --threads $(CPUS) \
+	--db $(KRAKEN2_PLUS) \
+	--memory-mapping \
+	--output - --report $@ --paired $^
+
+#%/centrifuge.tab : %/R1.fq.gz %/R2.fq.gz
+#	centrifuge -x $(CENTRIFUGE_DB) -p $(CPUS) -1 $(word 1,$^) -2 $(word 2,$^) \
+#	| centrifuge-kreport -x $(CENTRIFUGE_DB) > $@
 
 %/species.txt : %/$(SPECIES_SRC)
 	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
@@ -343,5 +359,11 @@ mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
 %/species_gtdb.txt : %/$(SPECIES_GTDB_SRC)
 	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
 
-%/sixess.txt : %/R1.fq.gz
-	sixess -d $(SIXESS_DB) -q -t $(CPUS) $< > $@
+%/species_plus.txt : %/$(SPECIES_PLUS_SRC)
+	grep -m 1 -w S $< | cut -f6 | sed 's/^ *//' > $@
+
+#%/sixess.txt : %/R1.fq.gz
+#	sixess -d $(SIXESS_DB) -q -t $(CPUS) $< > $@
+
+#%/qc.tab : %/plus.tab
+#	echo $@

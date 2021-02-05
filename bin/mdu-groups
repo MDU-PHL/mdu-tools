@@ -1,7 +1,15 @@
 #!/bin/bash
 
-for G in $(pbis list-groups-for-user $USER | cut -d ' ' -f6 | grep ^5266 | egrep -v '^(5266gg|5266gl-rs)$' ); do
+# list Users In Group
+#UIG="pbis enum-members"
+UIG="/opt/pbis/bin/enum-members"
+
+# List Groups For User
+#G4U="pbis list-groups-for-user"
+G4U="/opt/pbis/bin/list-groups-for-user"
+
+for G in $($G4U $USER | cut -d ' ' -f6 | grep ^526 | egrep -v '^(5266gg|5266gl-rs)$' ); do
 	echo "### $G ###"
-	pbis enum-members $G | grep SAM | sed 's/^.*: / /' | sort | nl
+	$UIG $G | grep SAM | sed 's/^.*: / /' | sort | nl
 	echo
 done

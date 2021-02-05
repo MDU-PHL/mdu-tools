@@ -9,7 +9,9 @@ else
   echo "Running QC on $HOSTNAME"
   mv -vf $QCDIR/QC.tab $BUSY
   mdu-qc --scan > $QCDIR/Makefile
-  nice make -l $(nproc) -j 8 -C $QCDIR
+  #nice make -l $(nproc) -j 8 -C $QCDIR
+  nice make -j 4 -C $QCDIR
+  #make -j 2 -C $QCDIR
   rm -vf $BUSY
   mdu-query --count
 fi

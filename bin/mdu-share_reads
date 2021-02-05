@@ -1,5 +1,6 @@
 #!/usr/bin/env perl
 use strict;
+use warnings;
 
 #-------------------------------------------------------------------
 # libraries
@@ -28,6 +29,7 @@ my $name = 'AUTO';
 my $dir = $ENV{HOME}.'/public_html';
 my $secure = 0;
 my $fastq = '/home/seq/MDU/READS';
+my $copy = '';
 
 sub usage {
   my $EXE = $FindBin::RealScript;
@@ -44,6 +46,7 @@ OPTIONS
   --name NAME   Folder name ($name)
   --www URL     Public facing website URL ($www)
   --fastq DIR   Where to look for FASTQ files ($fastq)
+  --copy        Copy files, don't symlink
 INPUT FORMAT
   The <isolates.tab> should be TSV format:
     <MDU_ID> <TAB> <AUSMDU_ID> <NEWLINE>
@@ -64,6 +67,7 @@ GetOptions(
   "www=s"     => \$www,
   "dir=s"     => \$dir,
   "fastq=s"   => \$fastq,
+  "copy!"     => \$copy,
 #  "secure!"   => \$secure,
 ) 
 or usage();
@@ -114,7 +118,15 @@ for my $mdu (sort keys %map) {
     my $new = $map{$mdu}."_R$R.fq.gz";
     print $WGET "wget --continue $www/~$user/$name/$new\n";
     unlink "$dest/$new";
-    symlink $fq, "$dest/$new" or err("Could not symlink: $mdu => $new\n$fq => $dest/$new");
+    if ($copy) {
+      system("rsync --progress '$fq' '$dest/$new'")==0
+        or err("Could not copy '$fq' => $dest/$new");;
+      chmod 0644, "$dest/$new";
+    }
+    else {
+      symlink $fq, "$dest/$new" 
+        or err("Could not symlink: $mdu => $new\n$fq => $dest/$new");
+    }
     print $HTML "<li><a href='$new'>$new</a>\n";
   }
 }

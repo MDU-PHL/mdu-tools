@@ -1,7 +1,9 @@
 package MDU;
 
 use base Exporter;
-@EXPORT_OK = qw(msg err);
+#@EXPORT_OK = qw(msg err);
+
+use MDU::Logger qw(msg err);
 
 #----------------------------------------------------------------------
 
@@ -18,7 +20,7 @@ sub dir {
 
 sub all_ids {
   my $root = MDU->dir;
-  opendir(my $dh, MDU->dir) or err("Could not read MDU dir: $root");
+  opendir(my $dh, $root) or err("Could not read MDU dir: $root");
   my @id = grep { !m/^\./ and -d "$root/$_" } readdir($dh);
   closedir($dh);
   return @id;
