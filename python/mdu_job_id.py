@@ -51,7 +51,17 @@ def found_notif(job_id, m_path, found=True):
 def find_run(job_id):
 	seq_path = "/home/seq/MDU/incoming/bcl/nextseq"
 	normal_folder = ["NextSeq500", "NextSeq550", "iSEQ"]
+	new_seq_path = "/home/mdu/instruments"
+	seq_folder = ["iseq100", "miseq", "nanopore", "nextseq2000", "nextseq500", "nextseq550"]
 	#check_recent
+	#check new server qc folder
+	for folder in seq_folder:
+		for mfile in os.listdir(os.path.join(new_seq_path, folder)):
+			if is_qc_folder(os.path.join(new_seq_path, folder, mfile)):
+				m_path = os.path.join(new_seq_path, folder, mfile)
+				if check_job_id(job_id, m_path):
+					found_notif(job_id, m_path)
+					return m_path
 	#base qc folder
 	for mfile in os.listdir(seq_path):
 		if is_qc_folder(os.path.join(seq_path,mfile)):
