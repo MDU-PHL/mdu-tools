@@ -18,7 +18,12 @@ use List::Util qw(sum max);
 # command line
 
 my $verbose = 0;
-my $db_file = abs_path( $MDU::MDUDIR."/../QC/QC.tab" );
+my $db_file = 
+  abs_path( $MDU::MDUDIR."/../QC/QC.tab" )
+  or
+  abs_path( $MDU::MDUDIR."/../QC/QC.tab.busy" )
+  or
+  err("Database is missing!");
 my $logical_or = 0;
 my $csv = 0;
 my $count = 0;

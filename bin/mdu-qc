@@ -165,19 +165,23 @@ ABRICATE := abricate --quiet --minid 90 --mincov 90
 
 ISOLATES := $(shell cat $(IDFILE))
 
-COMMANDS := contigs shovill skesa \
-	    mlst yield resistome virulome \
-            sketch kraken gtdb \
-            species species_gtdb \
-            species_plus \
-            prokka stats qc
+COMMANDS := contigs \
+            shovill skesa spades \
+	    yield stats \
+	    mlst prokka \
+	    resistome virulome \
+            sketch kraken \
+            kraken2 species \
+            gtdb species_gtdb \
+            plus species_plus \
+            prokka qc
 
 .SUFFIXES:
 .DELETE_ON_ERROR:
 .SECONDARY:
 .ONESHELL:
 .DEFAULT: all
-.PHONY: all info clean clean2 clean3 blastdb $(COMMANDS)
+.PHONY: all info clean clean2 clean3 $(COMMANDS)
 
 all : QC.tab
 
@@ -191,27 +195,28 @@ help :
 info :
 	echo $(ISOLATES)  | tr " " "\n" | nl
 
-#shovill : $(addsuffix /shovill.fa,$(ISOLATES))
-#spades : $(addsuffix /spades.fa,$(ISOLATES))
-#skesa : $(addsuffix /skesa.fa,$(ISOLATES))
+shovill : $(addsuffix /shovill.fa,$(ISOLATES))
+spades : $(addsuffix /spades.fa,$(ISOLATES))
+skesa : $(addsuffix /skesa.fa,$(ISOLATES))
 #rapidasm : $(addsuffix /rapidasm.fa,$(ISOLATES))
 
-#mlst : $(addsuffix /mlst.tab,$(ISOLATES))
-#yield : $(addsuffix /yield.tab,$(ISOLATES))
-#resistome : $(addsuffix /resistome.tab,$(ISOLATES))
-#virulome : $(addsuffix /virulome.tab,$(ISOLATES))
-#sketch : $(addsuffix /sketch.msh,$(ISOLATES))
+mlst : $(addsuffix /mlst.tab,$(ISOLATES))
+sistr : $(addsuffix /sistr.json,$(ISOLATES))
+yield : $(addsuffix /yield.tab,$(ISOLATES))
+resistome : $(addsuffix /resistome.tab,$(ISOLATES))
+virulome : $(addsuffix /virulome.tab,$(ISOLATES))
+sketch : $(addsuffix /sketch.msh,$(ISOLATES))
 #kraken : $(addsuffix /kraken.tab,$(ISOLATES))
-#kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
-#gtdb : $(addsuffix /gtdb.tab,$(ISOLATES))
+kraken2 : $(addsuffix /kraken2.tab,$(ISOLATES))
+gtdb : $(addsuffix /gtdb.tab,$(ISOLATES))
 plus : $(addsuffix /plus.tab,$(ISOLATES))
 #centrifuge : $(addsuffix /centrifuge.tab,$(ISOLATES))
-#species : $(addsuffix /species.txt,$(ISOLATES))
-#species_gtdb : $(addsuffix /species_gtdb.txt,$(ISOLATES))
-#species_plus : $(addsuffix /species_plus.txt,$(ISOLATES))
-#prokka : $(addsuffix /prokka.gff,$(ISOLATES))
-#stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
-#qc : $(addsuffix /qc.tab,$(ISOLATES))
+species : $(addsuffix /species.txt,$(ISOLATES))
+species_gtdb : $(addsuffix /species_gtdb.txt,$(ISOLATES))
+species_plus : $(addsuffix /species_plus.txt,$(ISOLATES))
+prokka : $(addsuffix /prokka.gff,$(ISOLATES))
+stats : $(addsuffix /R1.stats.tab,$(ISOLATES)) $(addsuffix /R2.stats.tab,$(ISOLATES))
+qc : $(addsuffix /qc.tab,$(ISOLATES))
 
 # remove empty files, dead symlinks, temp folders, or java bug folders
 clean :
@@ -235,13 +240,24 @@ QC.tab : $(addsuffix /qc.tab,$(ISOLATES))
 QC.csv : QC.tab
 	tsv_to_csv.pl < $< > $@
 
-#blastdb : mducontigs.nin
-
-#mducontigs.nin : $(addsuffix /contigs.fa,$(ISOLATES))
-#	cat $^ | makeblastdb -title mducontigs -dbtype nucl -hash_index -out mducontigs
-
-%/qc.tab: %/species.txt %/species_gtdb.txt%/species_plus.tab %/sketch.msh %/yield.tab %/R1.stats.tab %/R2.stats.tab %/contigs.fa %/prokka.gff %/resistome.tab %/virulome.tab %/mlst.tab %/skesa.fa 
-	mdu-qc-isolate_summary --quiet --header $(@D) > $@
+%/qc.tab: %/species.txt \
+          %/species_gtdb.txt \
+          %/species_plus.txt \
+          %/sketch.msh \
+          %/yield.tab \
+          %/R1.stats.tab \
+          %/R2.stats.tab \
+          %/contigs.fa \
+          %/prokka.gff \
+          %/resistome.tab \
+          %/virulome.tab \
+          %/mlst.tab \
+          %/skesa.fa \
+          %/ngmaster.tab \
+          %/sistr.json \
+          %/lissero.tab 
+	mdu-qc-isolate_summary \
+	--quiet --header $(@D) > $@
 
 %/prokka.gff : %/contigs.fa %/species.txt
 	$(eval TMP := $(shell mktemp -d))
@@ -315,6 +331,15 @@ QC.csv : QC.tab
 %/mlst.tab : %/contigs.fa $(MLST_SEQ)
 	mlst --quiet $< > $@
 
+%/ngmaster.tab : %/contigs.fa
+	@ngmaster $< > $@
+
+%/lissero.tab : %/contigs.fa
+	@lissero  $< > $@
+
+%/sistr.json : %/contigs.fa
+	@sistr $< | json_pp > $@
+
 %/yield.tab : %/contigs.fa %/R1.fq.gz %/R2.fq.gz
 	fq --quiet --ref $^  > $@
 
@@ -365,5 +390,3 @@ QC.csv : QC.tab
 #%/sixess.txt : %/R1.fq.gz
 #	sixess -d $(SIXESS_DB) -q -t $(CPUS) $< > $@
 
-#%/qc.tab : %/plus.tab
-#	echo $@

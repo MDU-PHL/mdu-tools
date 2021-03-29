@@ -114,6 +114,7 @@ for my $mdu (sort keys %map) {
   msg("Processing: $mdu =>",$map{$mdu});
   for my $R (1, 2) {
     my($fq) = <"$fastq/$mdu/*_R${R}*q.gz">;
+    $fq or err("No file for $mdu R$R");
     -r $fq or err("Can't read file: $fq");
     my $new = $map{$mdu}."_R$R.fq.gz";
     print $WGET "wget --continue $www/~$user/$name/$new\n";

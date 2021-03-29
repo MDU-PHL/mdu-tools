@@ -1,16 +1,24 @@
 #!/usr/bin/env bash
-set -e
+set -eu
+
 QCDIR="/home/seq/MDU/QC"
 BUSY="$QCDIR/QC.tab.busy"
+READS="/home/seq/MDU/READS"
+
 if [ -r "$BUSY" ]; then
   echo "QC already running? $BUSY exists."
+  echo "mv -vf $BUSY $QCDIR/QC.tab && $0"
   exit 1
 else
+  for D in $READS $QCDIR ; do
+    echo "Caching: $D"
+    (cd $D && fd | pv -l | wc -l)
+  done
   echo "Running QC on $HOSTNAME"
   mv -vf $QCDIR/QC.tab $BUSY
   mdu-qc --scan > $QCDIR/Makefile
   #nice make -l $(nproc) -j 8 -C $QCDIR
-  nice make -j 4 -C $QCDIR
+  make -j 32 -C $QCDIR
   #make -j 2 -C $QCDIR
   rm -vf $BUSY
   mdu-query --count
